@@ -1,23 +1,37 @@
 import { Router } from "express";
-import { supabase } from "../lib/supabase.js";
+import { getSupabase } from "../lib/supabase.js";
+import { safeClientMessage } from "../lib/safeClientMessage.js";
 import type { CandidatoInsert, CandidatoUpdate } from "../types/candidato.js";
 
 export const candidatosRouter = Router();
 
+function dbOr503(res: import("express").Response) {
+  try {
+    return getSupabase();
+  } catch (e) {
+    res.status(503).json({ message: safeClientMessage(e) });
+    return null;
+  }
+}
+
 candidatosRouter.get("/", async (_req, res) => {
+  const supabase = dbOr503(res);
+  if (!supabase) return;
   const { data, error } = await supabase
     .from("candidatos")
     .select("*")
     .order("created_at", { ascending: false });
 
   if (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: safeClientMessage(error) });
     return;
   }
   res.json(data);
 });
 
 candidatosRouter.get("/:id", async (req, res) => {
+  const supabase = dbOr503(res);
+  if (!supabase) return;
   const { id } = req.params;
   const { data, error } = await supabase
     .from("candidatos")
@@ -26,7 +40,7 @@ candidatosRouter.get("/:id", async (req, res) => {
     .maybeSingle();
 
   if (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: safeClientMessage(error) });
     return;
   }
   if (!data) {
@@ -37,15 +51,21 @@ candidatosRouter.get("/:id", async (req, res) => {
 });
 
 candidatosRouter.post("/", async (req, res) => {
+  const supabase = dbOr503(res);
+  if (!supabase) return;
   const body = req.body as Partial<CandidatoInsert>;
   if (!body.nome || typeof body.nome !== "string") {
     res.status(400).json({ message: "Campo obrigatório: nome" });
     return;
   }
+  if (!body.telefone || typeof body.telefone !== "string" || !body.telefone.trim()) {
+    res.status(400).json({ message: "Campo obrigatório: telefone" });
+    return;
+  }
 
   const row: CandidatoInsert = {
     nome: body.nome.trim(),
-    telefone: body.telefone ?? null,
+    telefone: body.telefone.trim(),
     email: body.email ?? null,
     cargo: body.cargo ?? null,
     cidade: body.cidade ?? null,
@@ -59,13 +79,15 @@ candidatosRouter.post("/", async (req, res) => {
     .single();
 
   if (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: safeClientMessage(error) });
     return;
   }
   res.status(201).json(data);
 });
 
 candidatosRouter.put("/:id", async (req, res) => {
+  const supabase = dbOr503(res);
+  if (!supabase) return;
   const { id } = req.params;
   const body = req.body as CandidatoUpdate;
 
@@ -77,7 +99,13 @@ candidatosRouter.put("/:id", async (req, res) => {
     }
     patch.nome = body.nome.trim();
   }
-  if (body.telefone !== undefined) patch.telefone = body.telefone;
+  if (body.telefone !== undefined) {
+    if (typeof body.telefone !== "string" || !body.telefone.trim()) {
+      res.status(400).json({ message: "telefone inválido" });
+      return;
+    }
+    patch.telefone = body.telefone.trim();
+  }
   if (body.email !== undefined) patch.email = body.email;
   if (body.cargo !== undefined) patch.cargo = body.cargo;
   if (body.cidade !== undefined) patch.cidade = body.cidade;
@@ -103,7 +131,7 @@ candidatosRouter.put("/:id", async (req, res) => {
     .maybeSingle();
 
   if (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: safeClientMessage(error) });
     return;
   }
   if (!data) {
@@ -114,6 +142,8 @@ candidatosRouter.put("/:id", async (req, res) => {
 });
 
 candidatosRouter.delete("/:id", async (req, res) => {
+  const supabase = dbOr503(res);
+  if (!supabase) return;
   const { id } = req.params;
   const { data, error } = await supabase
     .from("candidatos")
@@ -123,7 +153,7 @@ candidatosRouter.delete("/:id", async (req, res) => {
     .maybeSingle();
 
   if (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: safeClientMessage(error) });
     return;
   }
   if (!data) {

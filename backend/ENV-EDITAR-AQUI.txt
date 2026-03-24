@@ -1,0 +1,31 @@
+================================================================================
+  CONFIGURAÇÃO DO BACKEND (Gegê)
+================================================================================
+
+O arquivo que o programa lê chama-se:  .env
+Ele fica nesta mesma pasta (backend), mas às vezes some na lista lateral
+porque arquivos .env costumam ser ignorados pelo Git.
+
+O QUE FAZER:
+
+1) No Cursor, pressione Ctrl+Shift+P (ou F1).
+2) Digite:  Open File
+3) Escolha "File: Open File..."
+4) Cole o caminho completo do arquivo .env (ajuste se sua pasta for outra):
+
+   c:\Users\gisel\.cursor\projects\C-Users-gisel-cursor-projects-C-Users-gisel-AppData-Local-Temp-83bdb234-1035-42b0-8c05-42ba8ced5121\gege\backend\.env
+
+5) Preencha SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY e salve (Ctrl+S).
+
+Também ativamos em .vscode/settings.json a opção para o .env aparecer
+na árvore de pastas. Se ainda não aparecer: feche e abra de novo a pasta
+gege no Cursor, ou use o passo Ctrl+Shift+P acima.
+
+================================================================================
+Conteúdo que deve ficar no .env (exemplo):
+================================================================================
+
+SUPABASE_URL=https://SEU-PROJETO.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=cole_a_chave_service_role_aqui
+PORT=4000
+CORS_ORIGIN=http://localhost:3000

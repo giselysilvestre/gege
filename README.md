@@ -20,10 +20,11 @@ Com **RLS** ativado e sem políticas públicas, apenas o backend com a **service
 
 ## Variáveis de ambiente
 
-O arquivo **`.env.example`** na raiz lista todas as variáveis. Resumo:
+Veja **`.env.example`**. Resumo:
 
-- **Backend** (`backend/.env`): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PORT`, `CORS_ORIGIN`.
-- **Frontend** (`frontend/.env.local`): `NEXT_PUBLIC_API_URL` (URL da API, ex.: `http://localhost:4000`).
+- **Backend** (`backend/.env`): `SUPABASE_URL` (só `https://xxx.supabase.co`), `SUPABASE_SERVICE_ROLE_KEY` (chave **service_role**, não URL), `PORT`.
+- **Frontend** (`frontend/.env.local`): em **dev**, `GEGE_API_URL=http://127.0.0.1:4000` para o Next (servidor) falar com o Express. O **browser** usa o proxy interno **`/gege-api`** (configurado no `next.config.ts`), evitando CORS entre portas.
+- **Produção**: defina `NEXT_PUBLIC_API_URL` com a URL pública da API.
 
 ## API (CRUD)
 
@@ -41,31 +42,30 @@ Base: `http://localhost:4000` (ou a URL que você configurar).
 
 ## Como rodar
 
-1. Crie o projeto no Supabase, rode a migration SQL e copie **Project URL** e **service_role** (Settings → API).
+1. Crie o projeto no Supabase, rode a migration SQL e copie **Project URL** e a chave **service_role** (Settings → API → Legacy API keys).
 
-2. **Backend**
+2. **`backend/.env`**: preencha `SUPABASE_URL` e **`SUPABASE_SERVICE_ROLE_KEY`** (sem isso a API não sobe).
+
+3. **`frontend/.env.local`**: use `GEGE_API_URL=http://127.0.0.1:4000` (veja `.env.example`).
+
+4. **Um comando (recomendado)** — na pasta raiz do repositório (`gege/`):
 
    ```bash
-   cd backend
-   # Crie .env com as variáveis da seção "Backend" em ../.env.example
    npm install
+   npm run install:all
    npm run dev
    ```
 
-3. **Frontend** (outro terminal)
+   Isso sobe **backend (4000)** e **frontend (3000)** juntos.
 
-   ```bash
-   cd frontend
-   # Crie .env.local com NEXT_PUBLIC_API_URL (veja ../.env.example)
-   npm install
-   npm run dev
-   ```
+5. Ou em dois terminais: `npm run dev` em `backend/` e `npm run dev` em `frontend/`.
 
-4. Abra [http://localhost:3000](http://localhost:3000).
+6. Abra o endereço que o Next mostrar (geralmente [http://localhost:3000](http://localhost:3000)).
 
 ## Scripts úteis
 
-- Backend: `npm run dev` (desenvolvimento), `npm run build` + `npm start` (produção).
+- Raiz: `npm run dev` (backend + frontend), `npm run install:all`.
+- Backend: `npm run dev`, `npm run build` + `npm start`.
 - Frontend: `npm run dev`, `npm run build`, `npm start`.
 
 ## Segurança

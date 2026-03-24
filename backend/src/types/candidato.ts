@@ -1,7 +1,7 @@
 export interface Candidato {
   id: string;
   nome: string;
-  telefone: string | null;
+  telefone: string;
   email: string | null;
   cargo: string | null;
   cidade: string | null;
