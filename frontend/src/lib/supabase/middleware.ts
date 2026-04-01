@@ -1,37 +1,57 @@
 import { createServerClient } from "@supabase/ssr";
+import type { User } from "@supabase/supabase-js";
 import { type NextRequest, NextResponse } from "next/server";
 
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`Defina ${name} no frontend/.env.local`);
-  return value;
-}
+/**
+ * Roda no Edge (Vercel). Evitar throw (vira MIDDLEWARE_INVOCATION_FAILED).
+ * Não usar APIs Node (fs, path, crypto do Node, Buffer global inexistente no Edge antigo).
+ */
+export async function updateSession(request: NextRequest): Promise<{
+  response: NextResponse;
+  user: User | null;
+}> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
 
-export async function updateSession(request: NextRequest) {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return { response: NextResponse.next({ request }), user: null };
+  }
+
   let response = NextResponse.next({ request });
 
-  const supabase = createServerClient(
-    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          response = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
-          });
-        },
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
       },
-    }
-  );
+      setAll(cookiesToSet) {
+        // Atualizar o request ajuda Server Components a ver o JWT já refrescado (Supabase).
+        // No Edge da Vercel, `request.cookies.set` às vezes não existe ou lança — aí só gravamos na response.
+        try {
+          cookiesToSet.forEach(({ name, value }) => {
+            request.cookies.set(name, value);
+          });
+        } catch {
+          /* somente response.cookies abaixo */
+        }
+        response = NextResponse.next({ request });
+        cookiesToSet.forEach(({ name, value, options }) => {
+          response.cookies.set(name, value, options);
+        });
+      },
+    },
+  });
 
-  // getUser valida o JWT com o Auth (getSession confia só no cookie local).
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return { response, user: user ?? null };
+  try {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+    if (error) {
+      return { response, user: null };
+    }
+    return { response, user: user ?? null };
+  } catch {
+    return { response, user: null };
+  }
 }
