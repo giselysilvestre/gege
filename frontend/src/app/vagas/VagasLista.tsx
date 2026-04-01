@@ -75,6 +75,7 @@ export function VagasLista({ initialVagas, errorMessage }: Props) {
   const [q, setQ] = useState("");
   const [unidade, setUnidade] = useState("");
   const [statusFiltro, setStatusFiltro] = useState<"ativa" | "inativa" | "todas">("ativa");
+  const [statusVagaFiltro, setStatusVagaFiltro] = useState<"todas" | "aberta" | "fechada" | "cancelada">("todas");
   const [sortBy, setSortBy] = useState<"vaga" | "unidade" | "posicoes" | "inscritos" | "etapa" | "status" | "aberto">("aberto");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -92,6 +93,9 @@ export function VagasLista({ initialVagas, errorMessage }: Props) {
       const ativa = v.status_vaga === "aberta" || v.status_vaga === "em_selecao";
       if (statusFiltro === "ativa" && !ativa) return false;
       if (statusFiltro === "inativa" && ativa) return false;
+      if (statusVagaFiltro === "aberta" && !(v.status_vaga === "aberta" || v.status_vaga === "em_selecao")) return false;
+      if (statusVagaFiltro === "fechada" && v.status_vaga !== "fechada") return false;
+      if (statusVagaFiltro === "cancelada" && v.status_vaga !== "cancelada") return false;
       const u = vagaUnidadePublica(v) ?? "";
       if (unidade && u !== unidade) return false;
       const needle = q.trim().toLowerCase();
@@ -131,7 +135,7 @@ export function VagasLista({ initialVagas, errorMessage }: Props) {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return sorted;
-  }, [vagas, q, unidade, statusFiltro, sortBy, sortDir]);
+  }, [vagas, q, unidade, statusFiltro, statusVagaFiltro, sortBy, sortDir]);
   const activeChips = [
     ...(q.trim()
       ? [{ key: "q", label: `Busca: ${q.trim()}`, onRemove: () => setQ("") }]
@@ -141,6 +145,9 @@ export function VagasLista({ initialVagas, errorMessage }: Props) {
       : []),
     ...(statusFiltro !== "ativa"
       ? [{ key: "st", label: `Status: ${statusFiltro}`, onRemove: () => setStatusFiltro("ativa") }]
+      : []),
+    ...(statusVagaFiltro !== "todas"
+      ? [{ key: "stv", label: `Situação: ${statusVagaFiltro}`, onRemove: () => setStatusVagaFiltro("todas") }]
       : []),
   ];
 
@@ -174,13 +181,16 @@ export function VagasLista({ initialVagas, errorMessage }: Props) {
 
   return (
     <div style={{ minHeight: "100%" }}>
-      <div className="flex aic jsb mb16">
+      <div className="flex aic jsb mb16 vagas-head-mobile">
         <Link href="/dashboard" className="btn btn-ghost btn-sm">
           ← Voltar
         </Link>
+        <Link href="/vagas/nova" className="dash-mobile-new-btn vagas-new-mobile-only">
+          + Nova Vaga
+        </Link>
       </div>
 
-      <div className="search-row">
+      <div className="search-row vagas-search-mobile">
         <input
           className="search-input"
           type="text"
@@ -213,6 +223,7 @@ export function VagasLista({ initialVagas, errorMessage }: Props) {
           setQ("");
           setUnidade("");
           setStatusFiltro("ativa");
+          setStatusVagaFiltro("todas");
         }}
       />
 
@@ -222,7 +233,7 @@ export function VagasLista({ initialVagas, errorMessage }: Props) {
         </p>
       ) : null}
 
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <div className="card vagas-desktop-table" style={{ padding: 0, overflow: "hidden" }}>
         <div className="table-wrap">
           <table>
             <thead>
@@ -285,6 +296,71 @@ export function VagasLista({ initialVagas, errorMessage }: Props) {
             </tbody>
           </table>
         </div>
+      </div>
+      <div className="vagas-mobile-cards">
+        {rows.map((v) => {
+          const cands = v.candidaturas ?? [];
+          const un = vagaUnidadePublica(v);
+          const pos = (v as { quantidade_vagas?: number | null }).quantidade_vagas;
+          const posicoes = pos != null && pos > 0 ? pos : 1;
+          const posLabel = `${posicoes} ${posicoes > 1 ? "Posições" : "Posição"}`;
+          const aberto = getDaysOpen(v.criado_em, v.status_vaga, v.fechada_em ?? null);
+          return (
+            <Link
+              key={`mv-${v.id}`}
+              href={`/candidatos?vaga=${encodeURIComponent(v.id)}`}
+              className="dash-mobile-job-card"
+              style={{ marginBottom: 10 }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: "var(--gray-900)" }}>{vagaTituloPublico(v)}</div>
+                <div onClick={(e) => e.preventDefault()}>
+                  <select
+                    className="search-input"
+                    style={{ maxWidth: 120, height: 30, padding: "0 8px", fontSize: 12 }}
+                    value={statusSelectLabel(v.status_vaga)}
+                    onChange={(e) => {
+                      const val = e.target.value as "aberta" | "fechada" | "cancelada";
+                      if (val === statusSelectLabel(v.status_vaga)) return;
+                      void updateStatusVaga(v.id, val);
+                    }}
+                  >
+                    <option value="aberta">aberta</option>
+                    <option value="fechada">fechada</option>
+                    <option value="cancelada">cancelada</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 6, lineHeight: 1.35 }}>
+                {[un, posLabel].filter(Boolean).join(" · ")}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 12, lineHeight: 1.5 }}>
+                {[v.salario ? String(v.salario) : null, v.escala ?? null, v.horario ?? null].filter(Boolean).join(" · ")}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <span className="ep ep-inscrito" style={{ background: "var(--gray-900)", color: "white" }}>
+                  {statusVagaLabel(v.status_vaga)}
+                </span>
+                <span style={{ fontSize: 12, color: "var(--gray-400)" }}>{aberto}</span>
+              </div>
+              <div style={{ display: "flex", gap: 8, paddingTop: 10, borderTop: "1px solid var(--n200)" }}>
+                {[
+                  ["inscritos", cands.length],
+                  ["triados", cands.filter((c) => c.status === "em_triagem").length],
+                  ["entrevista", cands.filter((c) => c.status === "em_entrevista" || c.status === "entrevistado").length],
+                  ["teste", cands.filter((c) => c.status === "em_teste" || c.status === "teste" || c.status === "aprovado_teste").length],
+                ].map(([lbl, val]) => (
+                  <div key={String(lbl)} style={{ flex: 1, textAlign: "center", minWidth: 0 }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: "var(--gray-900)", lineHeight: 1 }}>{val}</div>
+                    <div style={{ marginTop: 7, fontSize: 9, color: "var(--gray-400)", textTransform: "uppercase", letterSpacing: "0.03em", fontWeight: 600 }}>
+                      {lbl}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Link>
+          );
+        })}
       </div>
 
       {!errorMessage && rows.length === 0 ? (

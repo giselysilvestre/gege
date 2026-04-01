@@ -1,5 +1,6 @@
 'use client'
 import Image from 'next/image'
+import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser'
@@ -36,15 +37,21 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="fixed top-0 left-0 h-screen flex flex-col z-50" style={{ width: 'var(--sidebar-w)', background: 'var(--berry)' }}>
+    <aside className="app-sidebar fixed top-0 left-0 h-screen flex flex-col z-50" style={{ width: 'var(--sidebar-w)', background: 'var(--berry)' }}>
       <div className="px-5 py-5 border-b border-white/10">
-        <Image
-          src="/branding/logo-gege-wordmark-light.png"
-          alt="gegê"
-          width={220}
-          height={66}
-          className="sb-logo-wordmark"
-        />
+        <Link
+          href="/dashboard"
+          className="sb-logo-link block rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-white/35 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--berry)]"
+          aria-label="Ir para Início"
+        >
+          <Image
+            src="/branding/logo-gege-wordmark-light.png"
+            alt=""
+            width={220}
+            height={66}
+            className="sb-logo-wordmark"
+          />
+        </Link>
       </div>
       <nav className="flex-1 px-2.5 py-3.5 overflow-y-auto">
         {NAV.map(({ href, label, icon }) => {

@@ -326,7 +326,7 @@ function CandidatosContent() {
   if (loading) return <div className="fs14 c600" style={{ padding: 8 }}>Carregando candidatos…</div>;
 
   const stageBoxes: { key: string; label: string; n: number }[] = [
-    { key: "todos", label: "Todos", n: stageCounts.todos },
+    { key: "todos", label: "Inscritos", n: stageCounts.todos },
     { key: "triagem", label: "Triagem", n: stageCounts.triagem },
     { key: "entrevista", label: "Entrevista", n: stageCounts.entrevista },
     { key: "teste", label: "Teste", n: stageCounts.teste },
@@ -374,6 +374,20 @@ function CandidatosContent() {
           </div>
         ))}
       </div>
+      <div className="stage-summary-mobile mb16">
+        {[
+          { n: stageCounts.todos, label: "Inscritos" },
+          { n: stageCounts.triagem, label: "Triagem" },
+          { n: stageCounts.entrevista, label: "Entrevista" },
+          { n: stageCounts.teste, label: "Teste" },
+          { n: stageCounts.contratado, label: "Contratado" },
+        ].map((s) => (
+          <div key={s.label} className="stage-summary-mobile-item">
+            <div className="stage-summary-mobile-n">{s.n}</div>
+            <div className="stage-summary-mobile-l">{s.label}</div>
+          </div>
+        ))}
+      </div>
 
       <div className="search-row">
         <input className="search-input" type="text" placeholder="🔍  Buscar candidatos..." value={q} onChange={(e) => setQ(e.target.value)} />
@@ -400,96 +414,175 @@ function CandidatosContent() {
       ) : null}
 
       {!noCliente ? (
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <div className="table-wrap">
-            <table className="eq-table">
-              <colgroup>
-                <col style={{ width: "14.285%" }} />
-                <col style={{ width: "14.285%" }} />
-                <col style={{ width: "14.285%" }} />
-                <col style={{ width: "14.285%" }} />
-                <col style={{ width: "14.285%" }} />
-                <col style={{ width: "14.285%" }} />
-                <col style={{ width: "14.285%" }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th className="sortable" onClick={() => onSort("candidato")}>Candidato {sortArrow(sortBy, sortDir, "candidato")}</th>
-                  <th>Experiência</th>
-                  <th
-                    className="sortable"
-                    title="Score IA do currículo do candidato (0–100)."
-                    onClick={() => onSort("score")}
-                  >
-                    Score IA {sortArrow(sortBy, sortDir, "score")}
-                  </th>
-                  <th>Tags</th>
-                  <th className="sortable" onClick={() => onSort("etapa")}>Etapa {sortArrow(sortBy, sortDir, "etapa")}</th>
-                  <th className="sortable" onClick={() => onSort("inscricao")}>Inscrição {sortArrow(sortBy, sortDir, "inscricao")}</th>
-                  <th>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tableRows.map((r) => {
-                  const ep = etapaPill(r.status);
-                  const dt = r.enviado_em ? new Date(r.enviado_em) : null;
-                  const insc = dt && Number.isFinite(dt.getTime()) ? dt.toLocaleDateString("pt-BR") : "—";
-                  const mergedTags = tagsDaLinha(r).slice(0, 4);
-                  const sc = normalizePercentScore(r.score ?? r.candidato.score);
-                  const age = idadeDe(r.candidato.data_nascimento ?? null);
-                  const loc = [age != null ? `${age}a` : null, cidadeUf(r.candidato.cidade), fmtKm(r.distancia_km)].filter(Boolean).join(" · ");
-                  const exp = (r.candidato.exp_resumo?.trim() || "").split(/\n|[;|]/)[0]?.trim() || buildExperienciaResumoLinha(r.candidato) || "—";
-                  const nextEtapa = nextLabel(r.status);
-                  return (
-                    <tr key={r.candidaturaId} style={{ cursor: "pointer" }} onClick={() => router.push(`/candidatos/${r.candidato.id}?vaga=${encodeURIComponent(r.vagaId)}`)}>
-                      <td>
-                        <div className="flex aic g8">
-                          <div className="av">{initialsFromNome(r.candidato.nome)}</div>
-                          <div>
-                            <div className="fw6">{r.candidato.nome}</div>
-                            <div className="cand-loc">{loc || "—"}</div>
+        <>
+          <div className="candidatos-desktop-table card" style={{ padding: 0, overflow: "hidden" }}>
+            <div className="table-wrap">
+              <table className="eq-table">
+                <colgroup>
+                  <col style={{ width: "14.285%" }} />
+                  <col style={{ width: "14.285%" }} />
+                  <col style={{ width: "14.285%" }} />
+                  <col style={{ width: "14.285%" }} />
+                  <col style={{ width: "14.285%" }} />
+                  <col style={{ width: "14.285%" }} />
+                  <col style={{ width: "14.285%" }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th className="sortable" onClick={() => onSort("candidato")}>Candidato {sortArrow(sortBy, sortDir, "candidato")}</th>
+                    <th>Experiência</th>
+                    <th
+                      className="sortable"
+                      title="Score IA do currículo do candidato (0–100)."
+                      onClick={() => onSort("score")}
+                    >
+                      Score IA {sortArrow(sortBy, sortDir, "score")}
+                    </th>
+                    <th>Tags</th>
+                    <th className="sortable" onClick={() => onSort("etapa")}>Etapa {sortArrow(sortBy, sortDir, "etapa")}</th>
+                    <th className="sortable" onClick={() => onSort("inscricao")}>Inscrição {sortArrow(sortBy, sortDir, "inscricao")}</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableRows.map((r) => {
+                    const ep = etapaPill(r.status);
+                    const dt = r.enviado_em ? new Date(r.enviado_em) : null;
+                    const insc = dt && Number.isFinite(dt.getTime()) ? dt.toLocaleDateString("pt-BR") : "—";
+                    const mergedTags = tagsDaLinha(r).slice(0, 4);
+                    const sc = normalizePercentScore(r.score ?? r.candidato.score);
+                    const age = idadeDe(r.candidato.data_nascimento ?? null);
+                    const loc = [age != null ? `${age}a` : null, cidadeUf(r.candidato.cidade), fmtKm(r.distancia_km)].filter(Boolean).join(" · ");
+                    const exp = (r.candidato.exp_resumo?.trim() || "").split(/\n|[;|]/)[0]?.trim() || buildExperienciaResumoLinha(r.candidato) || "—";
+                    const nextEtapa = nextLabel(r.status);
+                    return (
+                      <tr key={r.candidaturaId} style={{ cursor: "pointer" }} onClick={() => router.push(`/candidatos/${r.candidato.id}?vaga=${encodeURIComponent(r.vagaId)}`)}>
+                        <td>
+                          <div className="flex aic g8">
+                            <div className="av">{initialsFromNome(r.candidato.nome)}</div>
+                            <div>
+                              <div className="fw6">{r.candidato.nome}</div>
+                              <div className="cand-loc">{loc || "—"}</div>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="c600 fs13">{exp || "—"}</td>
-                      <td>{sc != null ? <div className={scoreClass(r.score ?? r.candidato.score)}>{Math.round(sc)}</div> : <span className="c400">—</span>}</td>
-                      <td>
-                        <div className="tag-row">
-                          {mergedTags.map((t) => (
-                            <span key={t} className={t === "desempregado" ? "badge b-blue" : "badge b-olive"}>{t}</span>
-                          ))}
-                        </div>
-                      </td>
-                      <td><span className={ep.className}>{ep.label}</span></td>
-                      <td className="c600 fs13">{insc}</td>
-                      <td onClick={(e) => e.stopPropagation()}>
-                        <select
-                          className="search-input"
-                          style={{ maxWidth: 170 }}
-                          defaultValue=""
-                          onChange={(e) => {
-                            const val = e.target.value as "proxima" | "reprovar" | "desistiu" | "whatsapp" | "";
-                            if (!val) return;
-                            void onAction(r.candidaturaId, val, r.candidato.telefone ?? "");
-                            e.currentTarget.value = "";
-                          }}
-                        >
-                          <option value="">Ações</option>
-                          <option value="proxima" disabled={!nextEtapa}>
-                            {nextEtapa ? `Avançar p/ ${nextEtapa}` : "Sem próxima etapa"}
-                          </option>
-                          <option value="reprovar">Reprovar</option>
-                          <option value="desistiu">Desistiu</option>
-                          <option value="whatsapp">WhatsApp</option>
-                        </select>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td className="c600 fs13">{exp || "—"}</td>
+                        <td>{sc != null ? <div className={scoreClass(r.score ?? r.candidato.score)}>{Math.round(sc)}</div> : <span className="c400">—</span>}</td>
+                        <td>
+                          <div className="tag-row">
+                            {mergedTags.map((t) => (
+                              <span key={t} className={t === "desempregado" ? "badge b-blue" : "badge b-olive"}>{t}</span>
+                            ))}
+                          </div>
+                        </td>
+                        <td><span className={ep.className}>{ep.label}</span></td>
+                        <td className="c600 fs13">{insc}</td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <select
+                            className="search-input"
+                            style={{ maxWidth: 170 }}
+                            defaultValue=""
+                            onChange={(e) => {
+                              const val = e.target.value as "proxima" | "reprovar" | "desistiu" | "whatsapp" | "";
+                              if (!val) return;
+                              void onAction(r.candidaturaId, val, r.candidato.telefone ?? "");
+                              e.currentTarget.value = "";
+                            }}
+                          >
+                            <option value="">Ações</option>
+                            <option value="proxima" disabled={!nextEtapa}>
+                              {nextEtapa ? `Avançar p/ ${nextEtapa}` : "Sem próxima etapa"}
+                            </option>
+                            <option value="reprovar">Reprovar</option>
+                            <option value="desistiu">Desistiu</option>
+                            <option value="whatsapp">WhatsApp</option>
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+
+          <div className="candidatos-mobile-list">
+            {tableRows.map((r) => {
+              const ep = etapaPill(r.status);
+              const mergedTags = tagsDaLinha(r).slice(0, 4);
+              const sc = normalizePercentScore(r.score ?? r.candidato.score);
+              const age = idadeDe(r.candidato.data_nascimento ?? null);
+              const loc = [age != null ? `${age}a` : null, cidadeUf(r.candidato.cidade), fmtKm(r.distancia_km)].filter(Boolean).join(" · ");
+              const nextEtapa = nextLabel(r.status);
+              return (
+                <div
+                  key={`m-${r.candidaturaId}`}
+                  className="candidatos-mobile-card"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => router.push(`/candidatos/${r.candidato.id}?vaga=${encodeURIComponent(r.vagaId)}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      router.push(`/candidatos/${r.candidato.id}?vaga=${encodeURIComponent(r.vagaId)}`);
+                    }
+                  }}
+                >
+                  <div className="candidatos-mobile-card-head">
+                    <div className="flex aic g8" style={{ minWidth: 0, flex: 1 }}>
+                      <div className="av">{initialsFromNome(r.candidato.nome)}</div>
+                      <div style={{ minWidth: 0 }}>
+                        <div className="fw7" style={{ color: "var(--n900)", fontSize: 15, lineHeight: 1.25 }}>
+                          {r.candidato.nome}
+                        </div>
+                        <div className="cand-loc">{loc || "—"}</div>
+                      </div>
+                    </div>
+                    {sc != null ? (
+                      <span className={scoreClass(r.score ?? r.candidato.score)}>{Math.round(sc)}</span>
+                    ) : (
+                      <span className="c400 fs13">—</span>
+                    )}
+                  </div>
+                  <div style={{ marginTop: 10, fontSize: 13, color: "var(--n600)" }}>
+                    <strong style={{ color: "var(--n900)" }}>Cargo:</strong> {r.cargo}
+                  </div>
+                  <div className="tag-row" style={{ marginTop: 8 }}>
+                    {mergedTags.map((t) => (
+                      <span key={t} className={t === "desempregado" ? "badge b-blue" : "badge b-olive"} style={{ fontSize: 10 }}>
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="candidatos-mobile-card-footer">
+                    <span className={ep.className}>{ep.label}</span>
+                    <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+                      <select
+                        className="search-input candidatos-mobile-acoes-select"
+                        defaultValue=""
+                        aria-label="Ações do candidato"
+                        onChange={(e) => {
+                          const val = e.target.value as "proxima" | "reprovar" | "desistiu" | "whatsapp" | "";
+                          if (!val) return;
+                          void onAction(r.candidaturaId, val, r.candidato.telefone ?? "");
+                          e.currentTarget.value = "";
+                        }}
+                      >
+                        <option value="">Ações</option>
+                        <option value="proxima" disabled={!nextEtapa}>
+                          {nextEtapa ? `Avançar p/ ${nextEtapa}` : "Sem próxima etapa"}
+                        </option>
+                        <option value="reprovar">Reprovar</option>
+                        <option value="desistiu">Desistiu</option>
+                        <option value="whatsapp">WhatsApp</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       ) : null}
 
       {!noCliente && !tableRows.length ? <p className="fs13 muted mt16">Nenhuma inscrição encontrada.</p> : null}

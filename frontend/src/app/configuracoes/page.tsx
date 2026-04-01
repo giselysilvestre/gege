@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ensureClienteForUser } from "@/lib/ensureClienteBrowser";
 import { devError } from "@/lib/devLog";
@@ -38,6 +38,22 @@ type TabKey = "gerais" | "unidades" | "cargos";
 
 const CLIENTE_CONFIG_COLS =
   "cliente_id,nome_marca,logo_url,cor_primaria,carreira_trabalhe_texto,carreira_sobre_texto,carreira_url,carreira_capa_url,carreira_texto_cor,instagram_url,linkedin_url,site_url,contato_whatsapp,contato_telefone";
+
+const MOBILE_MAX = "(max-width: 900px)";
+
+function subscribeNarrow(cb: () => void) {
+  const mq = window.matchMedia(MOBILE_MAX);
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+}
+
+function getNarrowSnapshot() {
+  return window.matchMedia(MOBILE_MAX).matches;
+}
+
+function getNarrowServer() {
+  return false;
+}
 
 const EMPTY_CONFIG: Omit<ConfiguracoesCliente, "cliente_id"> = {
   nome_marca: "",
@@ -77,6 +93,12 @@ export default function ConfiguracoesPage() {
   const [loadingCep, setLoadingCep] = useState(false);
   const [initialSnapshot, setInitialSnapshot] = useState<string>("");
   const [previewTextColor, setPreviewTextColor] = useState<"light" | "dark">("light");
+  const isNarrow = useSyncExternalStore(subscribeNarrow, getNarrowSnapshot, getNarrowServer);
+  const [cargoDetailOpen, setCargoDetailOpen] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (isNarrow) setEditingCargoId(null);
+  }, [isNarrow]);
 
   async function loadAll() {
     const sb = getSupabaseBrowserClient();
@@ -350,48 +372,42 @@ export default function ConfiguracoesPage() {
   const initials = (form.nome_marca || "GE").split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]).join("").toUpperCase();
 
   return (
-    <div style={{ maxWidth: 980 }}>
-      <div style={{ display: "flex", gap: 0, borderBottom: "2px solid var(--n200)", marginBottom: 22 }}>
-        {[
-          { key: "unidades", label: "Unidades" },
-          { key: "cargos", label: "Cargos" },
-          { key: "gerais", label: "Página de Carreira" },
-        ].map((t) => {
-          const active = tab === (t.key as TabKey);
+    <div className="config-page" style={{ maxWidth: 980 }}>
+      <div className="config-page-tabs">
+        {(
+          [
+            { key: "unidades" as const, label: "Unidades", short: "Unidades" },
+            { key: "cargos" as const, label: "Cargos", short: "Cargos" },
+            { key: "gerais" as const, label: "Página de Carreira", short: "Pág. carreira" },
+          ] as const
+        ).map((t) => {
+          const active = tab === t.key;
           return (
             <button
               key={t.key}
               type="button"
-              onClick={() => setTab(t.key as TabKey)}
-              style={{
-                padding: "10px 20px",
-                border: "none",
-                background: "none",
-                marginBottom: -2,
-                borderBottom: active ? "2px solid var(--berry)" : "2px solid transparent",
-                color: active ? "var(--berry)" : "var(--n400)",
-                fontSize: 14,
-                fontWeight: active ? 700 : 600,
-                cursor: "pointer",
-              }}
+              className={`config-tab-btn${active ? " config-tab-btn--active" : ""}`}
+              onClick={() => setTab(t.key)}
             >
-              {t.label}
+              <span className="config-tab-label-long">{t.label}</span>
+              <span className="config-tab-label-short">{t.short}</span>
             </button>
           );
         })}
       </div>
 
       {tab === "unidades" ? (
-        <div className="card" style={{ display: "grid", gap: 14 }}>
-          <div className="flex aic jsb">
+        <div className="card config-unidades-card" style={{ display: "grid", gap: 14 }}>
+          <div className="flex aic jsb config-unidades-header">
             <div>
               <div className="fw7 fs18">Unidades</div>
             </div>
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => void addUnidade()}>
-              + Nova unidade
+            <button type="button" className="btn btn-primary btn-sm config-btn-nova-unidade" onClick={() => void addUnidade()}>
+              <span className="config-btn-nova-long">+ Nova unidade</span>
+              <span className="config-btn-nova-short">+ Nova</span>
             </button>
           </div>
-          <div className="grid-2" style={{ gap: 10 }}>
+          <div className="grid-2 config-nova-unidade-grid" style={{ gap: 10 }}>
             <input className="search-input" placeholder="Nome da unidade" value={novaUnidade.nome} onChange={(e) => setNovaUnidade((p) => ({ ...p, nome: e.target.value }))} />
             <input
               className="search-input"
@@ -401,9 +417,9 @@ export default function ConfiguracoesPage() {
               onBlur={() => void preencherEnderecoPorCep(novaUnidade.cep)}
             />
             <input className="search-input" placeholder="Endereço" value={novaUnidade.endereco_linha} onChange={(e) => setNovaUnidade((p) => ({ ...p, endereco_linha: e.target.value }))} />
-            <div className="flex g8">
+            <div className="flex g8 config-cidade-uf-row">
               <input className="search-input" placeholder="Cidade" value={novaUnidade.cidade} onChange={(e) => setNovaUnidade((p) => ({ ...p, cidade: e.target.value }))} />
-              <input className="search-input" placeholder="UF" value={novaUnidade.uf} onChange={(e) => setNovaUnidade((p) => ({ ...p, uf: e.target.value }))} />
+              <input className="search-input config-uf-input" placeholder="UF" value={novaUnidade.uf} onChange={(e) => setNovaUnidade((p) => ({ ...p, uf: e.target.value }))} />
             </div>
           </div>
           {loadingCep ? <div className="fs12 c500">Buscando endereço pelo CEP...</div> : null}
@@ -414,18 +430,22 @@ export default function ConfiguracoesPage() {
               </div>
             ) : (
               unidades.map((u) => (
-                <div key={u.id} style={{ border: "1px solid var(--n200)", borderRadius: 12, padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                  <div>
+                <div key={u.id} className="config-unidade-card">
+                  <div className="config-unidade-card-info">
                     <div className="fw7 fs14">{u.nome}</div>
                     <div className="fs12 c500">{[u.endereco_linha, u.cidade, u.uf].filter(Boolean).join(" · ") || "Sem endereço"}</div>
                   </div>
-                  <div className="flex aic g8">
-                    <label className="fs12 c500 flex aic g6">
+                  <div className="flex aic g8 config-unidade-card-actions">
+                    <label className="fs12 c500 flex aic g6 config-unidade-ativa">
                       <input type="checkbox" checked={u.ativo} onChange={(e) => setUnidades((prev) => prev.map((x) => (x.id === u.id ? { ...x, ativo: e.target.checked } : x)))} />
                       Ativa
                     </label>
-                    <button className="btn btn-ghost btn-xs" onClick={() => void saveUnidade(u)}>Salvar</button>
-                    <button className="btn btn-ghost btn-xs" onClick={() => void deleteUnidade(u.id)}>Excluir</button>
+                    <button type="button" className="btn btn-ghost btn-xs" onClick={() => void saveUnidade(u)}>
+                      Salvar
+                    </button>
+                    <button type="button" className="btn btn-ghost btn-xs" onClick={() => void deleteUnidade(u.id)}>
+                      Excluir
+                    </button>
                   </div>
                 </div>
               ))
@@ -435,13 +455,14 @@ export default function ConfiguracoesPage() {
       ) : null}
 
       {tab === "cargos" ? (
-        <div className="card" style={{ display: "grid", gap: 14 }}>
-          <div className="flex aic jsb">
+        <div className="card config-cargos-card" style={{ display: "grid", gap: 14 }}>
+          <div className="flex aic jsb config-cargos-header">
             <div>
               <div className="fw7 fs18">Cargos</div>
             </div>
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => void addCargo()}>
-              + Novo cargo
+            <button type="button" className="btn btn-primary btn-sm config-btn-nova-cargo" onClick={() => void addCargo()}>
+              <span className="config-btn-nova-cargo-long">+ Novo cargo</span>
+              <span className="config-btn-nova-cargo-short">+ Novo</span>
             </button>
           </div>
           <div className="grid-2" style={{ gap: 10 }}>
@@ -464,89 +485,151 @@ export default function ConfiguracoesPage() {
                 Nenhum cargo cadastrado.
               </div>
             ) : (
-              cargos.map((c) => (
-                <div key={c.id} style={{ border: "1px solid var(--n200)", borderRadius: 12, padding: 14, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-                  {editingCargoId === c.id ? (
-                    <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 8 }}>
-                      <div className="grid-2" style={{ gap: 8 }}>
-                        <input className="search-input" value={c.nome} onChange={(e) => setCargos((prev) => prev.map((x) => (x.id === c.id ? { ...x, nome: e.target.value } : x)))} />
-                        <input
-                          className="search-input"
-                          value={c.salario_referencia != null ? String(c.salario_referencia) : ""}
-                          placeholder="Salário"
-                          onChange={(e) =>
-                            setCargos((prev) =>
-                              prev.map((x) =>
-                                x.id === c.id
-                                  ? {
-                                      ...x,
-                                      salario_referencia: e.target.value.trim()
-                                        ? Number.isFinite(Number(e.target.value.replace(",", ".")))
-                                          ? Number(e.target.value.replace(",", "."))
-                                          : null
-                                        : null,
-                                    }
-                                  : x
-                              )
-                            )
-                          }
-                        />
-                        <select
-                          className="search-input"
-                          value={c.modalidade ?? ""}
-                          onChange={(e) => setCargos((prev) => prev.map((x) => (x.id === c.id ? { ...x, modalidade: e.target.value } : x)))}
-                        >
-                          <option value="">Modalidade</option>
-                          <option value="CLT">CLT</option>
-                          <option value="PJ">PJ</option>
-                          <option value="Híbrido">Híbrido</option>
-                          <option value="Remoto">Remoto</option>
-                        </select>
-                        <input className="search-input" value={c.atividades ?? ""} placeholder="Atividades" onChange={(e) => setCargos((prev) => prev.map((x) => (x.id === c.id ? { ...x, atividades: e.target.value } : x)))} />
+              cargos.map((c) => {
+                const editing = editingCargoId === c.id && !isNarrow;
+                const subline =
+                  [c.salario_referencia != null ? `R$ ${Number(c.salario_referencia).toLocaleString("pt-BR")}` : null, c.modalidade || null].filter(Boolean).join(" · ") ||
+                  "Sem salário/modalidade";
+                const detailBlocks = (
+                  <>
+                    {c.atividades?.trim() ? <div className="fs12 c600 config-cargo-text-block">{c.atividades.trim()}</div> : null}
+                    {c.requisitos_obrigatorios?.trim() ? (
+                      <div className="fs12 c500 config-cargo-text-block">
+                        <strong>Obrigatórios:</strong> {c.requisitos_obrigatorios.trim()}
                       </div>
-                      <textarea className="search-input" rows={2} value={c.requisitos_obrigatorios ?? ""} placeholder="Requisitos obrigatórios" onChange={(e) => setCargos((prev) => prev.map((x) => (x.id === c.id ? { ...x, requisitos_obrigatorios: e.target.value } : x)))} />
-                      <textarea className="search-input" rows={2} value={c.requisitos_desejaveis ?? ""} placeholder="Requisitos desejáveis" onChange={(e) => setCargos((prev) => prev.map((x) => (x.id === c.id ? { ...x, requisitos_desejaveis: e.target.value } : x)))} />
-                    </div>
-                  ) : (
-                    <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 6 }}>
-                      <div className="fw7 fs14">{c.nome}</div>
-                      <div className="fs12 c500">
-                        {[c.salario_referencia != null ? `R$ ${Number(c.salario_referencia).toLocaleString("pt-BR")}` : null, c.modalidade || null].filter(Boolean).join(" · ") || "Sem salário/modalidade"}
+                    ) : null}
+                    {c.requisitos_desejaveis?.trim() ? (
+                      <div className="fs12 c500 config-cargo-text-block">
+                        <strong>Desejáveis:</strong> {c.requisitos_desejaveis.trim()}
                       </div>
-                      {c.atividades?.trim() ? <div className="fs12 c600">{c.atividades.trim()}</div> : null}
-                      {c.requisitos_obrigatorios?.trim() ? <div className="fs12 c500"><strong>Obrigatórios:</strong> {c.requisitos_obrigatorios.trim()}</div> : null}
-                      {c.requisitos_desejaveis?.trim() ? <div className="fs12 c500"><strong>Desejáveis:</strong> {c.requisitos_desejaveis.trim()}</div> : null}
-                    </div>
-                  )}
-                  <div className="flex aic g8">
-                    <label className="fs12 c500 flex aic g6">
-                      <input type="checkbox" checked={c.ativo} onChange={(e) => setCargos((prev) => prev.map((x) => (x.id === c.id ? { ...x, ativo: e.target.checked } : x)))} />
-                      Ativo
-                    </label>
-                    {editingCargoId === c.id ? (
+                    ) : null}
+                  </>
+                );
+                const hasDetail = Boolean(c.atividades?.trim() || c.requisitos_obrigatorios?.trim() || c.requisitos_desejaveis?.trim());
+                return (
+                  <div key={c.id} className="config-cargo-card">
+                    {editing ? (
                       <>
-                        <button
-                          className="btn btn-ghost btn-xs"
-                          onClick={async () => {
-                            await saveCargo(c);
-                            setEditingCargoId(null);
-                          }}
-                        >
-                          Salvar
-                        </button>
-                        <button className="btn btn-ghost btn-xs" onClick={() => { void loadAll(); setEditingCargoId(null); }}>
-                          Cancelar
-                        </button>
+                        <div className="config-cargo-edit-col">
+                          <div className="grid-2 config-cargo-edit-grid" style={{ gap: 8 }}>
+                            <input className="search-input" value={c.nome} onChange={(e) => setCargos((prev) => prev.map((x) => (x.id === c.id ? { ...x, nome: e.target.value } : x)))} />
+                            <input
+                              className="search-input"
+                              value={c.salario_referencia != null ? String(c.salario_referencia) : ""}
+                              placeholder="Salário"
+                              onChange={(e) =>
+                                setCargos((prev) =>
+                                  prev.map((x) =>
+                                    x.id === c.id
+                                      ? {
+                                          ...x,
+                                          salario_referencia: e.target.value.trim()
+                                            ? Number.isFinite(Number(e.target.value.replace(",", ".")))
+                                              ? Number(e.target.value.replace(",", "."))
+                                              : null
+                                            : null,
+                                        }
+                                      : x
+                                  )
+                                )
+                              }
+                            />
+                            <select
+                              className="search-input"
+                              value={c.modalidade ?? ""}
+                              onChange={(e) => setCargos((prev) => prev.map((x) => (x.id === c.id ? { ...x, modalidade: e.target.value } : x)))}
+                            >
+                              <option value="">Modalidade</option>
+                              <option value="CLT">CLT</option>
+                              <option value="PJ">PJ</option>
+                              <option value="Híbrido">Híbrido</option>
+                              <option value="Remoto">Remoto</option>
+                            </select>
+                            <input className="search-input" value={c.atividades ?? ""} placeholder="Atividades" onChange={(e) => setCargos((prev) => prev.map((x) => (x.id === c.id ? { ...x, atividades: e.target.value } : x)))} />
+                          </div>
+                          <textarea className="search-input" rows={2} value={c.requisitos_obrigatorios ?? ""} placeholder="Requisitos obrigatórios" onChange={(e) => setCargos((prev) => prev.map((x) => (x.id === c.id ? { ...x, requisitos_obrigatorios: e.target.value } : x)))} />
+                          <textarea className="search-input" rows={2} value={c.requisitos_desejaveis ?? ""} placeholder="Requisitos desejáveis" onChange={(e) => setCargos((prev) => prev.map((x) => (x.id === c.id ? { ...x, requisitos_desejaveis: e.target.value } : x)))} />
+                        </div>
+                        <div className="flex aic g8 config-cargo-actions-row">
+                          <label className="fs12 c500 flex aic g6">
+                            <input type="checkbox" checked={c.ativo} onChange={(e) => setCargos((prev) => prev.map((x) => (x.id === c.id ? { ...x, ativo: e.target.checked } : x)))} />
+                            Ativo
+                          </label>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-xs"
+                            onClick={async () => {
+                              await saveCargo(c);
+                              setEditingCargoId(null);
+                            }}
+                          >
+                            Salvar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-xs"
+                            onClick={() => {
+                              void loadAll();
+                              setEditingCargoId(null);
+                            }}
+                          >
+                            Cancelar
+                          </button>
+                          <button type="button" className="btn btn-ghost btn-xs" onClick={() => void deleteCargo(c.id)}>
+                            Excluir
+                          </button>
+                        </div>
                       </>
                     ) : (
-                      <button className="btn btn-ghost btn-xs" onClick={() => setEditingCargoId(c.id)}>
-                        Editar
-                      </button>
+                      <>
+                        <div className="config-cargo-view-main">
+                          <div className="config-cargo-view-head">
+                            <div className="config-cargo-view-titles">
+                              <div className="fw7 fs14">{c.nome}</div>
+                              <div className="fs12 c500">{subline}</div>
+                            </div>
+                            <div className="flex aic g8 config-cargo-actions-row">
+                              <label className="fs12 c500 flex aic g6">
+                                <input type="checkbox" checked={c.ativo} onChange={(e) => setCargos((prev) => prev.map((x) => (x.id === c.id ? { ...x, ativo: e.target.checked } : x)))} />
+                                Ativo
+                              </label>
+                              {!isNarrow ? (
+                                <button type="button" className="btn btn-ghost btn-xs" onClick={() => setEditingCargoId(c.id)}>
+                                  Editar
+                                </button>
+                              ) : null}
+                              <button type="button" className="btn btn-ghost btn-xs" onClick={() => void deleteCargo(c.id)}>
+                                Excluir
+                              </button>
+                            </div>
+                          </div>
+                          {isNarrow ? (
+                            <>
+                              {hasDetail ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-xs config-cargo-ver-detalhes"
+                                  onClick={() =>
+                                    setCargoDetailOpen((prev) => ({
+                                      ...prev,
+                                      [c.id]: !prev[c.id],
+                                    }))
+                                  }
+                                >
+                                  {cargoDetailOpen[c.id] ? "Ocultar detalhes" : "Ver detalhes"}
+                                </button>
+                              ) : null}
+                              {cargoDetailOpen[c.id] ? <div className="config-cargo-detail-mobile">{detailBlocks}</div> : null}
+                            </>
+                          ) : (
+                            <div className="config-cargo-detail-desktop">{detailBlocks}</div>
+                          )}
+                        </div>
+                      </>
                     )}
-                    <button className="btn btn-ghost btn-xs" onClick={() => void deleteCargo(c.id)}>Excluir</button>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

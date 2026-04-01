@@ -541,14 +541,55 @@ function CandidatoPerfilInner() {
     if (action === "proxima") await onProximaEtapa();
     if (action === "reprovar") await onReprovar();
     if (action === "whatsapp" && wa) window.open(`https://wa.me/${wa}`, "_blank", "noopener,noreferrer");
+    if (action === "curriculo" && c?.curriculo_url?.trim()) {
+      window.open(c.curriculo_url.trim(), "_blank", "noopener,noreferrer");
+    }
   }
+
+  const proximaLabel =
+    proxDb === "em_triagem"
+      ? "Avançar p/ Triagem"
+      : proxDb === "em_entrevista"
+        ? "Avançar p/ Entrevista"
+        : proxDb === "em_teste"
+          ? "Avançar p/ Teste"
+          : proxDb === "contratado"
+            ? "Avançar p/ Contratado"
+            : "Sem próxima etapa";
 
   return (
     <div style={{ minHeight: "100%", paddingBottom: 32 }}>
-      <div className="mb16">
+      <div className="cand-detail-top-bar mb16">
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => router.push(backHref)}>
           ← Voltar
         </button>
+        {c ? (
+          <select
+            className="search-input cand-detail-acoes-mobile"
+            aria-label="Ações"
+            defaultValue=""
+            disabled={busy}
+            onChange={(e) => {
+              const val = e.target.value;
+              const el = e.currentTarget;
+              el.value = "";
+              if (!val) return;
+              void onActionChange(val);
+            }}
+          >
+            <option value="">Ações</option>
+            <option value="proxima" disabled={!candidatura || !proxDb}>
+              {proximaLabel}
+            </option>
+            <option value="reprovar" disabled={!candidatura}>
+              Reprovar
+            </option>
+            {wa ? <option value="whatsapp">WhatsApp</option> : null}
+            <option value="curriculo" disabled={!c.curriculo_url?.trim()}>
+              Ver currículo
+            </option>
+          </select>
+        ) : null}
       </div>
 
       {!c ? (
@@ -561,51 +602,59 @@ function CandidatoPerfilInner() {
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div className="card cand-profile-hero">
                 <div className="cand-profile-main">
-                  <div className="flex aic g16" style={{ minWidth: 0, flex: 1 }}>
-                    <div className="av av-lg cand-profile-avatar">{initialsFromNome(c.nome)}</div>
-                    <div style={{ minWidth: 0 }}>
-                      <h1 className="cand-profile-name">{c.nome}</h1>
-                      <div className="cand-profile-meta">{locLine || "—"}</div>
-                      <div className="cand-profile-meta" style={{ marginTop: 6, display: "grid", gap: 4 }}>
-                        {[c.bairro?.trim(), c.cidade?.trim(), distStr].filter(Boolean).length > 0 ? (
-                          <span>{[c.bairro?.trim(), c.cidade?.trim(), distStr].filter(Boolean).join(" · ")}</span>
-                        ) : null}
-                        {c.email?.trim() ? <span>Email: {c.email.trim()}</span> : null}
-                        {c.telefone?.trim() ? (
-                          <span>
-                            Telefone:{" "}
-                            {wa ? (
-                              <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" className="cand-profile-wa">
-                                <span style={{ marginRight: 4 }}>🟢</span>
-                                {c.telefone.trim()}
-                              </a>
-                            ) : (
-                              c.telefone.trim()
-                            )}
-                          </span>
-                        ) : null}
-                        {idade != null ? <span>Idade: {idade}</span> : null}
+                  <div className="cand-profile-primary">
+                    <div className="cand-profile-head-row">
+                      <div className="cand-profile-left-cluster">
+                        <div className="cand-profile-mobile-top">
+                          <div className="av av-lg cand-profile-avatar">{initialsFromNome(c.nome)}</div>
+                          <h1 className="cand-profile-name">{c.nome}</h1>
+                        </div>
+                        <div className="cand-profile-meta-section">
+                          <div className="cand-profile-meta">{locLine || "—"}</div>
+                          <div className="cand-profile-meta" style={{ marginTop: 6, display: "grid", gap: 4 }}>
+                            {[c.bairro?.trim(), c.cidade?.trim(), distStr].filter(Boolean).length > 0 ? (
+                              <span>{[c.bairro?.trim(), c.cidade?.trim(), distStr].filter(Boolean).join(" · ")}</span>
+                            ) : null}
+                            {c.email?.trim() ? <span>Email: {c.email.trim()}</span> : null}
+                            {c.telefone?.trim() ? (
+                              <span>
+                                Telefone:{" "}
+                                {wa ? (
+                                  <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" className="cand-profile-wa">
+                                    <span style={{ marginRight: 4 }}>🟢</span>
+                                    {c.telefone.trim()}
+                                  </a>
+                                ) : (
+                                  c.telefone.trim()
+                                )}
+                              </span>
+                            ) : null}
+                            {idade != null ? <span>Idade: {idade}</span> : null}
+                          </div>
+                          <div className="flex g6" style={{ marginTop: 10, flexWrap: "wrap" }}>
+                            {ep ? <span className={ep.className}>{ep.label}</span> : null}
+                            {tagItems.slice(0, 6).map((t) => (
+                              <span key={t} className="badge b-olive">
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex g6" style={{ marginTop: 10, flexWrap: "wrap" }}>
-                        {ep ? <span className={ep.className}>{ep.label}</span> : null}
-                        {tagItems.slice(0, 6).map((t) => (
-                          <span key={t} className="badge b-olive">
-                            {t}
-                          </span>
-                        ))}
+                      <div className="cand-profile-head-aside">
+                        <div className="cand-score-block">
+                          <div className={scoreCircleClass(displayIaScore)}>{displayIaScore != null ? displayIaScore : "—"}</div>
+                          <div className="cand-score-label">Score IA</div>
+                          <div className="cand-score-hint">Currículo / análise automática</div>
+                          {displayCombinedAnaliseScore != null ? (
+                            <div className="cand-score-combined">
+                              Final (IA + entrevista)
+                              <strong>{displayCombinedAnaliseScore}</strong>
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="cand-score-block">
-                    <div className={scoreCircleClass(displayIaScore)}>{displayIaScore != null ? displayIaScore : "—"}</div>
-                    <div className="cand-score-label">Score IA</div>
-                    <div className="cand-score-hint">Currículo / análise automática</div>
-                    {displayCombinedAnaliseScore != null ? (
-                      <div className="cand-score-combined">
-                        Final (IA + entrevista)
-                        <strong>{displayCombinedAnaliseScore}</strong>
-                      </div>
-                    ) : null}
                   </div>
                 </div>
               </div>
@@ -673,21 +722,13 @@ function CandidatoPerfilInner() {
             </div>
 
             <div className="cand-right-panel">
-              <div className="card">
+              <div className="card cand-acoes-desktop">
                 <div className="fs11 fw7 muted" style={{ textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 12 }}>
                   Ações
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   <button type="button" className="btn btn-ghost" disabled={busy || !candidatura || !proxDb} onClick={() => void onActionChange("proxima")}>
-                    {proxDb === "em_triagem"
-                      ? "Avançar p/ Triagem"
-                      : proxDb === "em_entrevista"
-                        ? "Avançar p/ Entrevista"
-                        : proxDb === "em_teste"
-                          ? "Avançar p/ Teste"
-                          : proxDb === "contratado"
-                            ? "Avançar p/ Contratado"
-                            : "Sem próxima etapa"}
+                    {proximaLabel}
                   </button>
                   <button type="button" className="btn btn-ghost" disabled={busy || !candidatura} onClick={() => void onActionChange("reprovar")}>
                     Reprovar

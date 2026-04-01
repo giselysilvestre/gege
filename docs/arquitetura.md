@@ -29,4 +29,4 @@ Ver `.env.example` na raiz. **Nunca** commitar chaves reais. Service role só em
 
 ## Problemas comuns
 
-- **Login (ou app) sem CSS, fonte Times, fundo branco:** em `globals.css`, o `@import` do `gege-mockup.css` deve ficar **antes** das diretivas `@tailwind`. Depois, na pasta `frontend/`, rode `npm run clean` e `npm run dev` de novo. Não indica erro na documentação do produto — é cache/build do Next ou ordem do PostCSS.
+- **Login (ou app) sem CSS, fonte Times, fundo branco:** o `gege-mockup.css` deve ser importado em `app/layout.tsx` **antes** de `globals.css` (import direto; evitar só `@import` dentro do `globals` no Next). Classes `.login-*` ficam em `@layer components` em `globals.css`. Depois: `npm run clean` e `npm run dev` no `frontend/`.

@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ensureClienteForUser, type ClienteEmpresa } from "@/lib/ensureClienteBrowser";
 import {
@@ -165,6 +167,7 @@ function bestByCandidate(rows: TopRow[]): TopRow[] {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [cliente, setCliente] = useState<ClienteEmpresa | null>(null);
   const [vagas, setVagas] = useState<DashboardVaga[]>([]);
@@ -180,6 +183,8 @@ export default function DashboardPage() {
   });
   const [funnel, setFunnel] = useState<{ label: string; value: number; pct: number; fill: string }[]>([]);
   const [topRows, setTopRows] = useState<TopRow[]>([]);
+  const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
+  const mobileProfileRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -346,6 +351,27 @@ export default function DashboardPage() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (!mobileProfileOpen) return;
+    const onPointerDown = (ev: MouseEvent | TouchEvent) => {
+      const target = ev.target as Node | null;
+      if (!target || !mobileProfileRef.current) return;
+      if (!mobileProfileRef.current.contains(target)) setMobileProfileOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+    };
+  }, [mobileProfileOpen]);
+
+  async function onMobileLogout() {
+    const sb = getSupabaseBrowserClient();
+    await sb.auth.signOut();
+    router.push("/login");
+  }
+
   const metricCards = [
     {
       label: "Vagas ativas",
@@ -387,68 +413,59 @@ export default function DashboardPage() {
 
   return (
     <div style={{ minHeight: "100%" }}>
-      <div className="grid-4" style={{ marginBottom: 24 }}>
-        {metricCards.map((m, i) => (
-          <div key={i} className="metric">
-            <div className="metric-label">{m.label}</div>
-            <div className="metric-value" style={{ color: "var(--gray-900)" }}>
-              {m.value}
-            </div>
-            <div className={`metric-sub ${m.subClass}`.trim()}>{m.sub}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid-2" style={{ marginBottom: 24, gap: 20 }}>
-        <div className="card">
-          <div style={{ fontWeight: 700, fontSize: 15, color: "var(--gray-900)", marginBottom: 20 }}>
-            Funil
-          </div>
-          {funnel.map((s, i) => (
-            <div key={i} className="funnel-row" style={{ marginBottom: 14 }}>
-              <div className="funnel-label" style={{ minWidth: 100 }}>
-                {s.label}
-              </div>
-              <div
-                style={{
-                  flex: 1,
-                  height: 8,
-                  borderRadius: 99,
-                  background: "var(--gray-200)",
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    height: 8,
-                    borderRadius: 99,
-                    width: `${s.pct}%`,
-                    background: s.fill,
-                    minWidth: s.pct > 0 ? 4 : 0,
-                    transition: "width 0.25s ease",
+      <section className="dash-mobile">
+        <div className="dash-mobile-header">
+          <Link href="/dashboard" className="dash-mobile-logo-link" aria-label="Ir para Início">
+            <Image src="/branding/logo-gege-purple-transparent.png" alt="" width={118} height={34} className="dash-mobile-logo" />
+          </Link>
+          <div className="dash-mobile-profile-wrap" ref={mobileProfileRef}>
+            <button type="button" className="dash-mobile-brand" onClick={() => setMobileProfileOpen((v) => !v)}>
+              <span className="dash-mobile-brand-avatar">
+                {((cliente.nome_contato?.trim().slice(0, 2) || "Gi").replace(/\s+/g, "").slice(0, 2) || "Gi").toUpperCase()}
+              </span>
+              <span className="dash-mobile-brand-copy">
+                <span className="dash-mobile-brand-person">{cliente.nome_contato?.trim() || "Recrutador"}</span>
+                <span className="dash-mobile-brand-company">{cliente.nome_empresa?.trim() || "Cliente"}</span>
+              </span>
+            </button>
+            {mobileProfileOpen ? (
+              <div className="dash-mobile-profile-menu">
+                <button
+                  type="button"
+                  className="dash-mobile-profile-item"
+                  onClick={() => {
+                    setMobileProfileOpen(false);
+                    router.push("/configuracoes");
                   }}
-                />
+                >
+                  Configurações
+                </button>
+                <button type="button" className="dash-mobile-profile-item dash-mobile-profile-item-danger" onClick={onMobileLogout}>
+                  Logout
+                </button>
               </div>
-              <div className="funnel-n" style={{ minWidth: 36 }}>
-                {s.value}
+            ) : null}
+          </div>
+        </div>
+
+        <div className="grid-4 dash-mobile-metrics">
+          {metricCards.map((m, i) => (
+            <div key={`m-${i}`} className="metric">
+              <div className="metric-label" style={{ textTransform: "none", letterSpacing: 0, fontSize: 13, color: "var(--n600)" }}>
+                {m.label}
               </div>
+              <div className="metric-value" style={{ color: "var(--n900)" }}>
+                {m.value}
+              </div>
+              <div className={`metric-sub ${m.subClass}`.trim()}>{m.sub}</div>
             </div>
           ))}
         </div>
 
-        <div className="card">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: 16,
-            }}
-          >
-            <div style={{ fontWeight: 700, fontSize: 15, color: "var(--gray-900)" }}>Vagas</div>
-            <Link href="/vagas" className="btn btn-ghost btn-sm" style={{ fontWeight: 600 }}>
-              Ver todas →
-            </Link>
+        <div className="dash-mobile-section card">
+          <div className="dash-mobile-section-head">
+            <h2>Vagas</h2>
+            <Link href="/vagas/nova" className="dash-mobile-new-btn">+ Nova Vaga</Link>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {vagas.slice(0, 3).map((v) => {
@@ -456,58 +473,28 @@ export default function DashboardPage() {
               const { inscritos, triados, entrevistados, testados } = vagaPipelineCounts(cands);
               const sal = formatSalario(v.salario);
               const uni = vagaUnidadePublica(v);
-              const meta = [sal, v.escala?.trim() || null, v.horario?.trim() || null, abertaHaDias(v.criado_em)].filter(
-                Boolean
-              ) as string[];
+              const meta = [sal, v.escala?.trim() || null, v.horario?.trim() || null].filter(Boolean) as string[];
               return (
-                <Link
-                  key={v.id}
-                  href={`/candidatos?vaga=${v.id}`}
-                  style={{
-                    display: "block",
-                    borderRadius: 12,
-                    padding: 16,
-                    border: "1px solid var(--gray-200)",
-                    textDecoration: "none",
-                    color: "inherit",
-                  }}
-                >
-                  <div style={{ fontWeight: 700, fontSize: 15, color: "var(--gray-900)", marginBottom: 4 }}>
-                    {vagaTituloPublico(v)}
-                  </div>
+                <Link key={`mv-${v.id}`} href={`/candidatos?vaga=${v.id}`} className="dash-mobile-job-card">
+                  <div style={{ fontWeight: 700, fontSize: 15, color: "var(--gray-900)", marginBottom: 6 }}>{vagaTituloPublico(v)}</div>
                   {uni ? (
-                    <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 10 }}>{uni}</div>
-                  ) : (
-                    <div style={{ marginBottom: 10 }} />
-                  )}
-                  <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 12, lineHeight: 1.5 }}>
-                    {meta.join(" · ")}
+                    <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 6 }}>{uni}</div>
+                  ) : null}
+                  <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 12, lineHeight: 1.5 }}>{meta.join(" · ")}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                    <span className="ep ep-inscrito" style={{ background: "var(--gray-900)", color: "white" }}>Nova</span>
+                    <span style={{ fontSize: 12, color: "var(--gray-400)" }}>{abertaHaDias(v.criado_em)}</span>
                   </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 16,
-                      paddingTop: 12,
-                      borderTop: "1px solid var(--gray-100)",
-                    }}
-                  >
+                  <div style={{ display: "flex", gap: 8, paddingTop: 12, borderTop: "1px solid var(--n200)" }}>
                     {[
                       ["inscritos", inscritos],
                       ["triados", triados],
-                      ["entrevistados", entrevistados],
-                      ["testados", testados],
+                      ["entrevista", entrevistados],
+                      ["teste", testados],
                     ].map(([lbl, val]) => (
-                      <div key={String(lbl)} style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 18, fontWeight: 800, color: "var(--gray-900)" }}>{val}</div>
-                        <div
-                          style={{
-                            fontSize: 10,
-                            color: "var(--gray-400)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.06em",
-                            fontWeight: 600,
-                          }}
-                        >
+                      <div key={String(lbl)} style={{ flex: 1, textAlign: "center" }}>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: "var(--gray-900)", lineHeight: 1 }}>{val}</div>
+                        <div style={{ marginTop: 6, fontSize: 10, color: "var(--gray-400)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>
                           {lbl}
                         </div>
                       </div>
@@ -516,113 +503,304 @@ export default function DashboardPage() {
                 </Link>
               );
             })}
-            {vagas.length === 0 ? (
-              <p style={{ fontSize: 13, color: "var(--gray-500)", margin: 0 }}>Nenhuma vaga ativa.</p>
-            ) : null}
+            {vagas.length === 0 ? <p style={{ fontSize: 13, color: "var(--n500)", margin: 0 }}>Nenhuma vaga ativa.</p> : null}
+          </div>
+          <div className="dash-mobile-vagas-footer">
+            <Link href="/vagas" className="dash-mobile-link">Ver todas</Link>
           </div>
         </div>
-      </div>
 
-      <div className="card">
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 8,
-          }}
-        >
-          <div style={{ fontWeight: 700, fontSize: 15, color: "var(--gray-900)" }}>Top candidatos</div>
-          <Link href="/candidatos" className="btn btn-ghost btn-sm" style={{ fontWeight: 600 }}>
-            Ver todos →
-          </Link>
+        <div className="dash-mobile-section card" style={{ marginBottom: 110 }}>
+          <div className="dash-mobile-section-head">
+            <h2>Top candidatos</h2>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {topRows.length === 0 ? (
+              <div className="card-sm" style={{ fontSize: 13, color: "var(--n500)" }}>
+                Nenhuma candidatura da empresa.
+              </div>
+            ) : (
+              topRows.map((r) => {
+                const ep = etapaPillTop(r.status);
+                const loc = [r.idade != null ? `${r.idade}a` : null, cidadeUf(r.cidade), r.distanciaKm != null ? `${r.distanciaKm}km` : null]
+                  .filter(Boolean)
+                  .join(" · ");
+                const sc = normalizePercentScore(r.score);
+                return (
+                  <Link key={`tc-${r.id}`} href={`/candidatos/${r.candidatoId}?vaga=${encodeURIComponent(r.vagaId)}`} className="dash-mobile-cand-card card-sm">
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div className="av">{initials(r.nome)}</div>
+                        <div>
+                          <div style={{ fontWeight: 700, color: "var(--n900)" }}>{r.nome}</div>
+                          <div className="cand-loc">{loc || "—"}</div>
+                        </div>
+                      </div>
+                      <span className={scoreClassCompat(r.score)}>{sc != null ? Math.round(sc) : "—"}</span>
+                    </div>
+                    <div style={{ marginTop: 10, fontSize: 13, color: "var(--n600)" }}>
+                      <strong style={{ color: "var(--n900)" }}>Vaga:</strong> {r.cargoVaga}
+                    </div>
+                    <div className="tag-row">
+                      {(r.tags ?? []).slice(0, 4).map((t) => (
+                        <span key={`${r.id}-${t}`} className="badge b-olive" style={{ fontSize: 10 }}>
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span className={ep.cls}>{ep.label}</span>
+                      <span style={{ fontSize: 13, color: "var(--n600)", textDecoration: "underline", textUnderlineOffset: 3 }}>Ver candidato →</span>
+                    </div>
+                  </Link>
+                );
+              })
+            )}
+          </div>
+          <div className="dash-mobile-vagas-footer">
+            <Link href="/candidatos" className="dash-mobile-link">Ver todos</Link>
+          </div>
         </div>
-        <div className="table-wrap">
-          <table className="eq-table">
-            <colgroup>
-              <col style={{ width: "14.285%" }} />
-              <col style={{ width: "14.285%" }} />
-              <col style={{ width: "14.285%" }} />
-              <col style={{ width: "14.285%" }} />
-              <col style={{ width: "14.285%" }} />
-              <col style={{ width: "14.285%" }} />
-              <col style={{ width: "14.285%" }} />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>Candidato</th>
-                <th>Vaga</th>
-                <th>Experiência</th>
-                <th style={{ textAlign: "center" }} title="Score IA do currículo (0–100)">
-                  Score IA
-                </th>
-                <th>Tags</th>
-                <th>Etapa</th>
-                <th style={{ width: 72 }} />
-              </tr>
-            </thead>
-            <tbody>
-              {topRows.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ color: "var(--gray-500)", fontSize: 13 }}>
-                    Nenhuma candidatura da empresa. Inscreva candidatos ou associe candidatos a vagas no Supabase.
-                  </td>
-                </tr>
-              ) : (
-                topRows.map((r) => {
-                  const ep = etapaPillTop(r.status);
-                  const loc =
-                    [r.idade != null ? `${r.idade}a` : null, cidadeUf(r.cidade), r.distanciaKm != null ? `${r.distanciaKm}km` : null]
-                      .filter(Boolean)
-                      .join(" · ");
-                  const sc = normalizePercentScore(r.score);
-                  return (
-                    <tr key={r.id}>
-                      <td>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <div className="av">{initials(r.nome)}</div>
-                          <div>
-                            <div style={{ fontWeight: 600, color: "var(--gray-900)" }}>{r.nome}</div>
-                            <div className="cand-loc">{loc}</div>
+      </section>
+
+      <section className="dash-desktop">
+        <div className="grid-4" style={{ marginBottom: 24 }}>
+          {metricCards.map((m, i) => (
+            <div key={i} className="metric">
+              <div className="metric-label">{m.label}</div>
+              <div className="metric-value" style={{ color: "var(--gray-900)" }}>
+                {m.value}
+              </div>
+              <div className={`metric-sub ${m.subClass}`.trim()}>{m.sub}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid-2" style={{ marginBottom: 24, gap: 20 }}>
+          <div className="card">
+            <div style={{ fontWeight: 700, fontSize: 15, color: "var(--gray-900)", marginBottom: 20 }}>
+              Funil
+            </div>
+            {funnel.map((s, i) => (
+              <div key={i} className="funnel-row" style={{ marginBottom: 14 }}>
+                <div className="funnel-label" style={{ minWidth: 100 }}>
+                  {s.label}
+                </div>
+                <div
+                  style={{
+                    flex: 1,
+                    height: 8,
+                    borderRadius: 99,
+                    background: "var(--gray-200)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: 8,
+                      borderRadius: 99,
+                      width: `${s.pct}%`,
+                      background: s.fill,
+                      minWidth: s.pct > 0 ? 4 : 0,
+                      transition: "width 0.25s ease",
+                    }}
+                  />
+                </div>
+                <div className="funnel-n" style={{ minWidth: 36 }}>
+                  {s.value}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="card">
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 16,
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: 15, color: "var(--gray-900)" }}>Vagas</div>
+              <Link href="/vagas" className="btn btn-ghost btn-sm" style={{ fontWeight: 600 }}>
+                Ver todas →
+              </Link>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {vagas.slice(0, 3).map((v) => {
+                const cands = v.candidaturas ?? [];
+                const { inscritos, triados, entrevistados, testados } = vagaPipelineCounts(cands);
+                const sal = formatSalario(v.salario);
+                const uni = vagaUnidadePublica(v);
+                const meta = [sal, v.escala?.trim() || null, v.horario?.trim() || null, abertaHaDias(v.criado_em)].filter(
+                  Boolean
+                ) as string[];
+                return (
+                  <Link
+                    key={v.id}
+                    href={`/candidatos?vaga=${v.id}`}
+                    style={{
+                      display: "block",
+                      borderRadius: 12,
+                      padding: 16,
+                      border: "1px solid var(--gray-200)",
+                      textDecoration: "none",
+                      color: "inherit",
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, fontSize: 15, color: "var(--gray-900)", marginBottom: 4 }}>
+                      {vagaTituloPublico(v)}
+                    </div>
+                    {uni ? (
+                      <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 10 }}>{uni}</div>
+                    ) : (
+                      <div style={{ marginBottom: 10 }} />
+                    )}
+                    <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 12, lineHeight: 1.5 }}>
+                      {meta.join(" · ")}
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 16,
+                        paddingTop: 12,
+                        borderTop: "1px solid var(--gray-100)",
+                      }}
+                    >
+                      {[
+                        ["inscritos", inscritos],
+                        ["triados", triados],
+                        ["entrevistados", entrevistados],
+                        ["testados", testados],
+                      ].map(([lbl, val]) => (
+                        <div key={String(lbl)} style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: "var(--gray-900)" }}>{val}</div>
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: "var(--gray-400)",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.06em",
+                              fontWeight: 600,
+                            }}
+                          >
+                            {lbl}
                           </div>
                         </div>
-                      </td>
-                      <td>{r.cargoVaga}</td>
-                      <td style={{ maxWidth: 220, fontSize: 12, color: "var(--gray-600)" }}>
-                        {r.expResumo?.trim() || "—"}
-                      </td>
-                      <td style={{ textAlign: "center" }}>
-                        {sc != null ? <span className={scoreClassCompat(r.score)}>{Math.round(sc)}</span> : "—"}
-                      </td>
-                      <td>
-                        <div className="tag-row">
-                          {(r.tags ?? []).slice(0, 4).map((t) => (
-                            <span key={t} className="badge b-olive" style={{ fontSize: 10 }}>
-                              {t}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td>
-                        <span className={ep.cls}>{ep.label}</span>
-                      </td>
-                      <td>
-                        <Link
-                          href={`/candidatos/${r.candidatoId}?vaga=${encodeURIComponent(r.vagaId)}`}
-                          className="btn btn-ghost btn-xs"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          Ver
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                      ))}
+                    </div>
+                  </Link>
+                );
+              })}
+              {vagas.length === 0 ? (
+                <p style={{ fontSize: 13, color: "var(--gray-500)", margin: 0 }}>Nenhuma vaga ativa.</p>
+              ) : null}
+            </div>
+          </div>
         </div>
-      </div>
+
+        <div className="card">
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 8,
+            }}
+          >
+            <div style={{ fontWeight: 700, fontSize: 15, color: "var(--gray-900)" }}>Top candidatos</div>
+            <Link href="/candidatos" className="btn btn-ghost btn-sm" style={{ fontWeight: 600 }}>
+              Ver todos →
+            </Link>
+          </div>
+          <div className="table-wrap">
+            <table className="eq-table">
+              <colgroup>
+                <col style={{ width: "14.285%" }} />
+                <col style={{ width: "14.285%" }} />
+                <col style={{ width: "14.285%" }} />
+                <col style={{ width: "14.285%" }} />
+                <col style={{ width: "14.285%" }} />
+                <col style={{ width: "14.285%" }} />
+                <col style={{ width: "14.285%" }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>Candidato</th>
+                  <th>Vaga</th>
+                  <th>Experiência</th>
+                  <th style={{ textAlign: "center" }} title="Score IA do currículo (0–100)">
+                    Score IA
+                  </th>
+                  <th>Tags</th>
+                  <th>Etapa</th>
+                  <th style={{ width: 72 }} />
+                </tr>
+              </thead>
+              <tbody>
+                {topRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ color: "var(--gray-500)", fontSize: 13 }}>
+                      Nenhuma candidatura da empresa. Inscreva candidatos ou associe candidatos a vagas no Supabase.
+                    </td>
+                  </tr>
+                ) : (
+                  topRows.map((r) => {
+                    const ep = etapaPillTop(r.status);
+                    const loc =
+                      [r.idade != null ? `${r.idade}a` : null, cidadeUf(r.cidade), r.distanciaKm != null ? `${r.distanciaKm}km` : null]
+                        .filter(Boolean)
+                        .join(" · ");
+                    const sc = normalizePercentScore(r.score);
+                    return (
+                      <tr key={r.id}>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div className="av">{initials(r.nome)}</div>
+                            <div>
+                              <div style={{ fontWeight: 600, color: "var(--gray-900)" }}>{r.nome}</div>
+                              <div className="cand-loc">{loc}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>{r.cargoVaga}</td>
+                        <td style={{ maxWidth: 220, fontSize: 12, color: "var(--gray-600)" }}>
+                          {r.expResumo?.trim() || "—"}
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          {sc != null ? <span className={scoreClassCompat(r.score)}>{Math.round(sc)}</span> : "—"}
+                        </td>
+                        <td>
+                          <div className="tag-row">
+                            {(r.tags ?? []).slice(0, 4).map((t) => (
+                              <span key={t} className="badge b-olive" style={{ fontSize: 10 }}>
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td>
+                          <span className={ep.cls}>{ep.label}</span>
+                        </td>
+                        <td>
+                          <Link
+                            href={`/candidatos/${r.candidatoId}?vaga=${encodeURIComponent(r.vagaId)}`}
+                            className="btn btn-ghost btn-xs"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            Ver
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

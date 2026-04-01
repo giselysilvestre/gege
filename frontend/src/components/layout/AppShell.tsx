@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation'
 import Sidebar from '@/components/layout/Sidebar'
 import Topbar from '@/components/layout/Topbar'
+import MobileBottomNav from '@/components/layout/MobileBottomNav'
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? ''
@@ -16,6 +17,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <Topbar />
       <main
+        className="app-shell-main"
         style={{
           marginLeft: 'var(--sidebar-w)',
           paddingTop: 'calc(var(--topbar-h) + 24px)',
@@ -28,6 +30,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       >
         {children}
       </main>
+      <MobileBottomNav />
     </>
   )
 }

@@ -21,7 +21,7 @@ export default function Topbar() {
   const pathname = usePathname() ?? ''
   const router = useRouter()
   return (
-    <header className="fixed top-0 right-0 z-40 flex items-center justify-between px-7 bg-white border-b"
+    <header className="app-topbar fixed top-0 right-0 z-40 flex items-center justify-between px-7 bg-white border-b"
       style={{ left: 'var(--sidebar-w)', height: 'var(--topbar-h)', borderColor: 'var(--n200)' }}>
       <span className="font-bold" style={{ color: 'var(--n900)', fontSize: 15 }}>{getTitle(pathname)}</span>
       <button onClick={() => router.push('/vagas/nova')}

@@ -198,16 +198,84 @@ tbody tr:hover { background: var(--gray-50); }
   flex-wrap: wrap;
   padding-bottom: 18px;
 }
+.cand-profile-primary {
+  flex: 1 1 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.cand-profile-head-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 18px;
+  width: 100%;
+}
+/* Desktop: avatar à esquerda; nome + metadados na coluna ao lado; mobile: ver @1080px */
+.cand-profile-left-cluster {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 16px;
+  row-gap: 6px;
+  flex: 1;
+  min-width: 0;
+  align-items: start;
+}
+.cand-profile-mobile-top {
+  display: contents;
+}
 .cand-profile-avatar {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  align-self: start;
+  flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 .cand-profile-name {
+  grid-column: 2;
+  grid-row: 1;
   margin: 0;
   font-size: 22px;
   font-weight: 750;
   letter-spacing: -0.5px;
   line-height: 1.2;
   color: var(--gray-900);
+  min-width: 0;
+}
+.cand-profile-meta-section {
+  grid-column: 2;
+  grid-row: 2;
+  width: 100%;
+  min-width: 0;
+}
+.cand-profile-head-aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+/* Detalhe candidato: linha com Voltar + Ações (dropdown só quando layout empilha, ver @1080px) */
+.cand-detail-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+.cand-detail-top-bar .btn {
+  flex-shrink: 0;
+}
+.cand-detail-top-bar .cand-detail-acoes-mobile {
+  display: none;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.cand-profile-meta-section > .cand-profile-meta:first-of-type {
+  margin-top: 0;
 }
 .cand-profile-meta {
   font-size: 12px;
@@ -333,6 +401,72 @@ tbody tr:hover { background: var(--gray-50); }
   }
   .cand-right-panel {
     position: static;
+  }
+  /* Dropdown Ações alinhado ao "Voltar" (topo direito da página) + sem duplicar card lateral */
+  .cand-detail-top-bar .cand-detail-acoes-mobile {
+    display: block;
+    width: auto;
+    min-width: 9.5rem;
+    max-width: min(11.5rem, 46vw);
+    min-height: 40px;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 12px;
+  }
+  .cand-acoes-desktop {
+    display: none !important;
+  }
+  /* Hero candidato: sem avatar no mobile; coluna do texto ocupa o espaço até o score */
+  .cand-profile-hero {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .cand-profile-hero .cand-profile-avatar {
+    display: none !important;
+  }
+  .cand-profile-head-row {
+    gap: 10px 12px;
+    align-items: flex-start;
+  }
+  .cand-profile-left-cluster {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    align-items: stretch;
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+    max-width: 100%;
+  }
+  .cand-profile-mobile-top {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    align-self: stretch;
+  }
+  .cand-profile-name {
+    grid-column: unset;
+    grid-row: unset;
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+  .cand-profile-meta-section {
+    grid-column: unset;
+    grid-row: unset;
+    width: 100%;
+    max-width: 100%;
+  }
+  .cand-profile-head-aside .cand-score-block {
+    min-width: 92px;
+    padding-left: 2px;
+    padding-right: 2px;
   }
 }
 
@@ -516,21 +650,98 @@ input[type=range] { width: 100%; accent-color: var(--olive); margin-top: 6px; }
    19. FORM COMPONENTS (nova vaga)
    ============================================================ */
 .flabel { font-size: 11px; font-weight: 700; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px; }
-.benefit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
-.benefit-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 9px 12px; border: 1.5px solid var(--gray-200);
-  border-radius: var(--radius-md); cursor: pointer; background: white;
-  font-size: 13px; font-weight: 500; color: var(--gray-700);
-  transition: border-color 0.15s;
+/* Nova vaga — multiselect de benefícios */
+.benefit-multiselect {
+  margin-top: 8px;
+  border: 1.5px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  background: white;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
-.benefit-item:hover { border-color: var(--olive); }
-.benefit-item input[type=checkbox] { accent-color: var(--olive); width: 15px; height: 15px; flex-shrink: 0; }
+.benefit-multiselect[open] {
+  border-color: var(--olive);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.07);
+}
+.benefit-multiselect-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gray-800);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  user-select: none;
+}
+.benefit-multiselect-summary::-webkit-details-marker { display: none; }
+.benefit-multiselect-summary::after {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--gray-400);
+  flex-shrink: 0;
+  margin-top: 2px;
+  transition: transform 0.15s;
+}
+.benefit-multiselect[open] .benefit-multiselect-summary::after {
+  transform: rotate(180deg);
+}
+.benefit-multiselect-summary-text {
+  min-width: 0;
+  flex: 1;
+  line-height: 1.35;
+}
+.benefit-multiselect-panel {
+  padding: 4px 8px 12px;
+  border-top: 1px solid var(--gray-100);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(320px, 55vh);
+  overflow-y: auto;
+}
+.benefit-ms-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 6px;
+  border-radius: 8px;
+}
+.benefit-ms-row:hover {
+  background: var(--gray-50);
+}
+.benefit-ms-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gray-700);
+}
+.benefit-ms-check input[type=checkbox] {
+  accent-color: var(--olive);
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.benefit-ms-value {
+  padding-left: 25px;
+}
 .benefit-val {
-  width: 80px; font-family: var(--font); font-size: 12px;
-  padding: 3px 8px; border: 1px solid var(--gray-200);
+  font-family: var(--font); font-size: 12px;
+  padding: 6px 10px; border: 1px solid var(--gray-200);
   border-radius: 6px; background: var(--gray-50); color: var(--gray-700);
-  outline: none; margin-left: auto;
+  outline: none;
+}
+.benefit-val--wide {
+  width: 100%;
+  max-width: 220px;
 }
 .benefit-val:focus { border-color: var(--olive); }
 

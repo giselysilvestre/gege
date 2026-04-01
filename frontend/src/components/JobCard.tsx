@@ -11,6 +11,8 @@ export type JobCardVaga = {
   escala?: string | null;
   horario?: string | null;
   endereco?: string | null;
+  /** CEP da loja (schema vagas); opcional. */
+  cep_loja?: string | null;
   /** Unidade/loja (migration 012); opcional. */
   unidade?: string | null;
   cliente_unidades?: { nome: string | null } | { nome: string | null }[] | null;
@@ -56,7 +58,9 @@ export function JobCard({ vaga }: { vaga: JobCardVaga }) {
   const cfg = STATUS_CONFIG[vaga.status_vaga] ?? STATUS_CONFIG.aberta;
   const { inscritos, match, entrevistas } = statsFromCandidaturas(vaga);
   const salarioFmt = formatSalario(vaga.salario);
-  const enderecoLinha = typeof vaga.endereco === "string" ? vaga.endereco.trim() : "";
+  const enderecoRaw = typeof vaga.endereco === "string" ? vaga.endereco.trim() : "";
+  const cepRaw = typeof vaga.cep_loja === "string" ? vaga.cep_loja.trim() : "";
+  const enderecoLinha = enderecoRaw || (cepRaw ? `CEP ${cepRaw}` : "");
   const showEndereco = Boolean(enderecoLinha);
   const titulo = vagaTituloPublico(vaga);
   const unidadeLinha = vagaUnidadePublica(vaga);

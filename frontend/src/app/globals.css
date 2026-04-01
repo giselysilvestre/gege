@@ -1,6 +1,3 @@
-/* @import deve vir antes de @tailwind (PostCSS/CSS); senão o bundle pode sair vazio ou sem tokens do mockup. */
-@import "../styles/gege-mockup.css";
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -62,15 +59,114 @@ html {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Alinhado ao mockup HTML (--gray-100 vem do gege-mockup.css importado acima) */
+/* --gray-100 vem de gege-mockup.css (import em layout.tsx antes deste ficheiro). */
 body { background-color: var(--gray-100, #f4f5f7); color: var(--n900); }
 a { color: inherit; text-decoration: none; }
 
-/* --------------------------------------------------------------------------
-   Login — classes dedicadas (hex explícitos).
-   O preflight do Tailwind zera border em * e deixa submit com fundo transparente;
-   variáveis CSS em estilos inline também podem falhar se :root não aplicar a tempo.
-   -------------------------------------------------------------------------- */
+/* Configurações — layout base (desktop; ajustes mobile em @media 900px) */
+.config-page-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--n200);
+  margin-bottom: 22px;
+}
+.config-tab-btn {
+  padding: 10px 20px;
+  border: none;
+  background: none;
+  margin-bottom: -2px;
+  border-bottom: 2px solid transparent;
+  color: var(--n400);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.config-tab-btn--active {
+  border-bottom-color: var(--berry);
+  color: var(--berry);
+  font-weight: 700;
+}
+.config-tab-label-short {
+  display: none;
+}
+.config-btn-nova-short,
+.config-btn-nova-cargo-short {
+  display: none;
+}
+.config-unidade-card {
+  border: 1px solid var(--n200);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.config-cargo-card {
+  border: 1px solid var(--n200);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.config-cargo-edit-col {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+.config-cargo-view-main {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.config-cargo-view-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.config-cargo-view-titles {
+  flex: 1;
+  min-width: 0;
+}
+.config-cargo-actions-row {
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.config-cargo-text-block {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.45;
+}
+.config-cargo-detail-desktop {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.config-cargo-detail-mobile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--n200);
+}
+.config-cargo-ver-detalhes {
+  align-self: flex-start;
+}
+
+/* Login + logo sidebar: @layer components fica depois do preflight (@tailwind base) e evita conflitos de ordem. */
+@layer components {
 .login-shell {
   min-height: 100vh;
   display: flex;
@@ -235,4 +331,597 @@ a { color: inherit; text-decoration: none; }
   font-size: 13px;
   color: var(--danger-strong);
 }
+}
 
+.mobile-bottom-nav {
+  display: none;
+}
+
+.dash-mobile {
+  display: none;
+}
+
+.vagas-mobile-cards {
+  display: none;
+}
+
+.vagas-new-mobile-only {
+  display: none;
+}
+
+.vagas-status-pills-mobile {
+  display: none;
+}
+
+.stage-summary-mobile {
+  display: none;
+}
+
+.candidatos-mobile-list {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .app-sidebar,
+  .app-topbar {
+    display: none !important;
+  }
+
+  .app-shell-main {
+    margin-left: 0 !important;
+    padding-top: 16px !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+    padding-bottom: 120px !important;
+  }
+
+  .mobile-bottom-nav {
+    position: fixed;
+    left: 24px;
+    right: 24px;
+    bottom: 10px;
+    z-index: 80;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: #2E1228;
+    border-radius: 24px;
+    padding: 7px 10px;
+    box-shadow: 0 10px 28px rgba(16, 24, 40, 0.28);
+  }
+
+  .mobile-bottom-nav-item {
+    min-height: 42px;
+    width: 38px;
+    flex: 0 0 38px;
+    border: none;
+    background: transparent;
+    color: rgba(225, 232, 245, 0.78);
+    border-radius: 16px;
+    padding: 6px 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .mobile-bottom-nav-icon {
+    width: 17px;
+    height: 17px;
+    display: inline-flex;
+  }
+
+  .mobile-bottom-nav-icon svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .mobile-bottom-nav-label {
+    display: none;
+    white-space: nowrap;
+  }
+
+  .mobile-bottom-nav-item.is-active {
+    background: #ffffff;
+    color: #0f172a;
+    border-radius: 999px;
+    width: auto;
+    flex: 0 1 auto;
+    padding-left: 13px;
+    padding-right: 13px;
+  }
+
+  .mobile-bottom-nav-item.is-active .mobile-bottom-nav-label {
+    display: inline;
+  }
+
+  .dash-desktop {
+    display: none;
+  }
+
+  .dash-mobile {
+    display: block;
+  }
+
+  .dash-mobile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-bottom: 14px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid var(--n200);
+  }
+
+  .dash-mobile-logo-link {
+    display: inline-block;
+    flex-shrink: 0;
+    line-height: 0;
+    border-radius: 8px;
+    outline: none;
+  }
+  .dash-mobile-logo-link:focus-visible {
+    box-shadow: 0 0 0 2px var(--berry-light), 0 0 0 4px var(--berry);
+  }
+  .dash-mobile-logo {
+    height: auto;
+    width: 62px;
+  }
+
+  .dash-mobile-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--gray-600);
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--gray-100);
+    border: 1px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+  }
+
+  .dash-mobile-profile-wrap {
+    position: relative;
+  }
+
+  .dash-mobile-profile-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 190px;
+    background: #fff;
+    border: 1px solid rgba(200, 141, 184, 0.35);
+    border-radius: 14px;
+    box-shadow: 0 12px 30px rgba(16, 24, 40, 0.2);
+    overflow: hidden;
+    z-index: 90;
+  }
+
+  .dash-mobile-profile-item {
+    width: 100%;
+    border: none;
+    background: transparent;
+    text-align: left;
+    padding: 11px 14px;
+    color: var(--berry-dark);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .dash-mobile-profile-item + .dash-mobile-profile-item {
+    border-top: 1px solid rgba(200, 141, 184, 0.28);
+  }
+
+  .dash-mobile-profile-item-danger {
+    color: var(--berry);
+  }
+
+  .dash-mobile-brand-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    background: var(--olive);
+    color: var(--berry-dark);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .dash-mobile-brand-copy {
+    display: inline-flex;
+    flex-direction: column;
+    line-height: 1.1;
+    gap: 3px;
+  }
+
+  .dash-mobile-brand-person {
+    color: var(--berry-dark);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .dash-mobile-brand-company {
+    color: var(--gray-500);
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .dash-mobile-metrics .metric {
+    padding: 16px;
+  }
+
+  .dash-mobile-metrics .metric-value {
+    font-size: 28px;
+    letter-spacing: -0.6px;
+  }
+
+  .dash-mobile-section {
+    margin-top: 22px;
+  }
+
+  .dash-mobile-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .dash-mobile-section-head h2 {
+    font-size: 15px;
+    color: var(--gray-900);
+    line-height: 1.1;
+    font-weight: 700;
+  }
+
+  .dash-mobile-link {
+    font-size: 14px;
+    color: var(--n600);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .dash-mobile-new-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    min-height: 34px;
+    border-radius: 999px;
+    background: var(--olive);
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 0 14px;
+    margin-bottom: 0;
+  }
+
+  .dash-mobile-vagas-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 12px;
+  }
+
+  .dash-mobile-new-btn:hover {
+    background: var(--olive-dark);
+  }
+
+  .dash-mobile-job-card,
+  .dash-mobile-cand-card {
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 14px;
+    display: block;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .dash-mobile-job-card .ep {
+    font-size: 10px;
+    padding: 3px 9px;
+  }
+
+  .dash-mobile-cand-card .score,
+  .dash-mobile-cand-card .score.mid,
+  .dash-mobile-cand-card .score.low {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
+    flex: 0 0 38px;
+    aspect-ratio: 1 / 1;
+    border-radius: 999px;
+    line-height: 1;
+  }
+
+  .dash-mobile .metric {
+    border-radius: 12px;
+    border-color: var(--gray-200);
+  }
+
+  .dash-mobile .metric-label {
+    color: var(--gray-600) !important;
+  }
+
+  .dash-mobile .metric-sub {
+    margin-top: 6px;
+    font-size: 11px;
+  }
+
+  .vagas-head-mobile {
+    margin-bottom: 10px;
+  }
+
+  .vagas-new-mobile-only {
+    display: inline-flex;
+    min-height: 40px;
+    padding: 0 18px;
+    font-size: 13px;
+  }
+
+  .vagas-search-mobile {
+    gap: 8px;
+  }
+
+  .vagas-search-mobile .search-input[type="text"] {
+    flex-basis: 100%;
+    width: 100%;
+    min-width: 100%;
+  }
+
+  .vagas-search-mobile select.search-input {
+    flex: 1 1 calc(50% - 4px);
+    width: calc(50% - 4px);
+    min-width: 0;
+    max-width: none !important;
+  }
+
+  .vagas-status-pills-mobile {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 2px 0 10px;
+  }
+
+  .vagas-status-pill {
+    border: 1px solid var(--gray-200);
+    background: #fff;
+    color: var(--gray-600);
+    border-radius: 999px;
+    min-height: 30px;
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+  }
+
+  .vagas-status-pill.is-active {
+    background: var(--berry-light);
+    border-color: rgba(200, 141, 184, 0.45);
+    color: var(--berry-dark);
+  }
+
+  .vagas-mobile-cards {
+    display: block;
+  }
+
+  .vagas-desktop-table {
+    display: none;
+  }
+
+  /* Candidatos mobile: uma linha, número em cima + rótulo embaixo (sem scroll) */
+  .stage-boxes {
+    display: none !important;
+  }
+
+  .stage-summary-mobile {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 4px;
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 12px 6px;
+    overflow: hidden;
+  }
+
+  .stage-summary-mobile-item {
+    flex: 1 1 0;
+    min-width: 0;
+    text-align: center;
+  }
+
+  .stage-summary-mobile-n {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--gray-900);
+    letter-spacing: -0.5px;
+    line-height: 1;
+  }
+
+  .stage-summary-mobile-l {
+    margin-top: 5px;
+    font-size: 8px;
+    font-weight: 600;
+    color: var(--gray-400);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    line-height: 1.15;
+    word-break: break-word;
+    hyphens: auto;
+  }
+
+  /* Candidatos: lista em cards (mobile); tabela só no desktop */
+  .candidatos-desktop-table {
+    display: none !important;
+  }
+
+  .candidatos-mobile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .candidatos-mobile-card {
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 14px;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+  }
+
+  .candidatos-mobile-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .candidatos-mobile-card .score,
+  .candidatos-mobile-card .score.mid,
+  .candidatos-mobile-card .score.low {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
+    flex: 0 0 38px;
+    aspect-ratio: 1 / 1;
+    border-radius: 999px;
+    line-height: 1;
+  }
+
+  .candidatos-mobile-card-footer {
+    margin-top: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .candidatos-mobile-acoes-select {
+    max-width: 160px;
+    min-height: 36px;
+    font-size: 12px;
+    padding: 0 10px;
+  }
+
+  /* Configurações — mobile */
+  .config-page {
+    min-width: 0;
+    overflow-x: hidden;
+  }
+  .config-page-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    margin-bottom: 16px;
+  }
+  .config-tab-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 8px 6px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .config-tab-label-long {
+    display: none;
+  }
+  .config-tab-label-short {
+    display: inline;
+  }
+  .config-btn-nova-long,
+  .config-btn-nova-cargo-long {
+    display: none;
+  }
+  .config-btn-nova-short,
+  .config-btn-nova-cargo-short {
+    display: inline;
+  }
+  .config-unidades-header,
+  .config-cargos-header {
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .config-unidades-header .fw7.fs18,
+  .config-cargos-header .fw7.fs18 {
+    font-size: 16px;
+  }
+  .config-btn-nova-unidade.btn.btn-sm,
+  .config-btn-nova-cargo.btn.btn-sm {
+    font-size: 12px;
+    padding: 6px 10px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .config-unidade-card {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px;
+    gap: 10px;
+  }
+  .config-unidade-card-info {
+    min-width: 0;
+    width: 100%;
+  }
+  .config-unidade-card-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .config-unidade-card-actions .btn-xs {
+    font-size: 11px;
+    padding: 4px 8px;
+  }
+  .config-cidade-uf-row {
+    flex-direction: column;
+  }
+  .config-cidade-uf-row .search-input {
+    width: 100%;
+    min-width: 0;
+  }
+  .config-uf-input {
+    max-width: 100%;
+  }
+  .config-unidades-card.card,
+  .config-cargos-card.card {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .config-cargo-view-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .config-cargo-actions-row {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .config-cargo-actions-row .btn-xs {
+    font-size: 11px;
+    padding: 4px 8px;
+  }
+  .config-cargo-edit-grid.grid-2 {
+    grid-template-columns: 1fr;
+  }
+}

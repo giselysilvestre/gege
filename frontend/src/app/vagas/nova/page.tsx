@@ -68,6 +68,32 @@ function parseBenefitBrl(raw: string): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
+function buildBeneficiosSummaryLabel(
+  flags: {
+    benefPlanoSaude: boolean;
+    benefOdonto: boolean;
+    benefVt: boolean;
+    benefRefeicao: boolean;
+    benefVa: boolean;
+    benefBonus: boolean;
+    benefCarreira: boolean;
+    benefOutros: boolean;
+  },
+): string {
+  const labels: string[] = [];
+  if (flags.benefPlanoSaude) labels.push("Plano de saúde");
+  if (flags.benefOdonto) labels.push("Plano odontológico");
+  if (flags.benefVt) labels.push("Vale transporte");
+  if (flags.benefRefeicao) labels.push("Refeição no local");
+  if (flags.benefVa) labels.push("Vale alimentação");
+  if (flags.benefBonus) labels.push("Bônus por meta");
+  if (flags.benefCarreira) labels.push("Plano de carreira");
+  if (flags.benefOutros) labels.push("Outros");
+  if (labels.length === 0) return "Selecione os benefícios…";
+  if (labels.length <= 2) return labels.join(" · ");
+  return `${labels.length} benefícios selecionados`;
+}
+
 export default function NovaVagaPage() {
   const [nomeVaga, setNomeVaga] = useState("");
   const [cargoCatalogoId, setCargoCatalogoId] = useState("");
@@ -429,35 +455,101 @@ export default function NovaVagaPage() {
           </div>
 
           <div className="mb16">
-            <label className="flabel">Benefícios</label>
-            <div className="benefit-grid">
-              <label className="benefit-item">
-                <input type="checkbox" checked={benefPlanoSaude} onChange={(e) => setBenefPlanoSaude(e.target.checked)} /> Plano de saúde
-              </label>
-              <label className="benefit-item">
-                <input type="checkbox" checked={benefOdonto} onChange={(e) => setBenefOdonto(e.target.checked)} /> Plano odontológico
-              </label>
-              <label className="benefit-item">
-                <input type="checkbox" checked={benefVt} onChange={(e) => setBenefVt(e.target.checked)} /> Vale transporte
-              </label>
-              <label className="benefit-item">
-                <input type="checkbox" checked={benefRefeicao} onChange={(e) => setBenefRefeicao(e.target.checked)} /> Refeição no local
-              </label>
-              <label className="benefit-item">
-                <input type="checkbox" checked={benefVa} onChange={(e) => setBenefVa(e.target.checked)} /> Vale alimentação{" "}
-                <input className="benefit-val" type="text" placeholder="R$ 500" value={benefVaVal} onClick={(e) => e.stopPropagation()} onChange={(e) => setBenefVaVal(e.target.value)} />
-              </label>
-              <label className="benefit-item">
-                <input type="checkbox" checked={benefBonus} onChange={(e) => setBenefBonus(e.target.checked)} /> Bônus por meta{" "}
-                <input className="benefit-val" type="text" placeholder="R$ 300" value={benefBonusVal} onClick={(e) => e.stopPropagation()} onChange={(e) => setBenefBonusVal(e.target.value)} />
-              </label>
-              <label className="benefit-item">
-                <input type="checkbox" checked={benefCarreira} onChange={(e) => setBenefCarreira(e.target.checked)} /> Plano de carreira
-              </label>
-              <label className="benefit-item">
-                <input type="checkbox" checked={benefOutros} onChange={(e) => setBenefOutros(e.target.checked)} /> Outros
-              </label>
-            </div>
+            <label className="flabel" id="beneficios-multiselect-label">
+              Benefícios
+            </label>
+            <details className="benefit-multiselect">
+              <summary className="benefit-multiselect-summary">
+                <span className="benefit-multiselect-summary-text">
+                  {buildBeneficiosSummaryLabel({
+                    benefPlanoSaude,
+                    benefOdonto,
+                    benefVt,
+                    benefRefeicao,
+                    benefVa,
+                    benefBonus,
+                    benefCarreira,
+                    benefOutros,
+                  })}
+                </span>
+              </summary>
+              <div className="benefit-multiselect-panel" role="group" aria-labelledby="beneficios-multiselect-label">
+                <div className="benefit-ms-row">
+                  <label className="benefit-ms-check">
+                    <input type="checkbox" checked={benefPlanoSaude} onChange={(e) => setBenefPlanoSaude(e.target.checked)} />
+                    <span>Plano de saúde</span>
+                  </label>
+                </div>
+                <div className="benefit-ms-row">
+                  <label className="benefit-ms-check">
+                    <input type="checkbox" checked={benefOdonto} onChange={(e) => setBenefOdonto(e.target.checked)} />
+                    <span>Plano odontológico</span>
+                  </label>
+                </div>
+                <div className="benefit-ms-row">
+                  <label className="benefit-ms-check">
+                    <input type="checkbox" checked={benefVt} onChange={(e) => setBenefVt(e.target.checked)} />
+                    <span>Vale transporte</span>
+                  </label>
+                </div>
+                <div className="benefit-ms-row">
+                  <label className="benefit-ms-check">
+                    <input type="checkbox" checked={benefRefeicao} onChange={(e) => setBenefRefeicao(e.target.checked)} />
+                    <span>Refeição no local</span>
+                  </label>
+                </div>
+                <div className="benefit-ms-row">
+                  <label className="benefit-ms-check">
+                    <input type="checkbox" checked={benefVa} onChange={(e) => setBenefVa(e.target.checked)} />
+                    <span>Vale alimentação</span>
+                  </label>
+                  {benefVa ? (
+                    <div className="benefit-ms-value">
+                      <input
+                        className="benefit-val benefit-val--wide"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="Ex.: R$ 500"
+                        value={benefVaVal}
+                        onChange={(e) => setBenefVaVal(e.target.value)}
+                        aria-label="Valor do vale alimentação"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+                <div className="benefit-ms-row">
+                  <label className="benefit-ms-check">
+                    <input type="checkbox" checked={benefBonus} onChange={(e) => setBenefBonus(e.target.checked)} />
+                    <span>Bônus por meta</span>
+                  </label>
+                  {benefBonus ? (
+                    <div className="benefit-ms-value">
+                      <input
+                        className="benefit-val benefit-val--wide"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="Ex.: R$ 300"
+                        value={benefBonusVal}
+                        onChange={(e) => setBenefBonusVal(e.target.value)}
+                        aria-label="Valor do bônus por meta"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+                <div className="benefit-ms-row">
+                  <label className="benefit-ms-check">
+                    <input type="checkbox" checked={benefCarreira} onChange={(e) => setBenefCarreira(e.target.checked)} />
+                    <span>Plano de carreira</span>
+                  </label>
+                </div>
+                <div className="benefit-ms-row">
+                  <label className="benefit-ms-check">
+                    <input type="checkbox" checked={benefOutros} onChange={(e) => setBenefOutros(e.target.checked)} />
+                    <span>Outros</span>
+                  </label>
+                </div>
+              </div>
+            </details>
           </div>
 
           <div className="mb16">

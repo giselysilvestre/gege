@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import { Plus_Jakarta_Sans } from 'next/font/google'
+/** Tokens + classes do mockup: import direto no layout (mais fiável que @import dentro do globals no pipeline do Next). */
+import '@/styles/gege-mockup.css'
 import './globals.css'
 import AppShell from '@/components/layout/AppShell'
 

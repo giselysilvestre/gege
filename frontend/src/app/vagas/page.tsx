@@ -34,7 +34,7 @@ export default function VagasPage() {
       const { data, error } = await supabase
         .from("vagas")
         .select(
-          "id,cargo,titulo_publicacao,salario,escala,horario,endereco,status_vaga,criado_em,fechada_em, cliente_unidades ( nome ), candidaturas ( id, status, score_compatibilidade, candidatos ( id ) )"
+          "id,cargo,titulo_publicacao,salario,escala,horario,unidade,descricao,cep_loja,quantidade_vagas,status_vaga,criado_em,fechada_em, cliente_unidades ( nome ), candidaturas ( id, status, score_compatibilidade, candidatos ( id ) )"
         )
         .eq("cliente_id", cliente.id)
         .order("criado_em", { ascending: false });
