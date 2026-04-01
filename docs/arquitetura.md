@@ -29,4 +29,4 @@ Ver `.env.example` na raiz. **Nunca** commitar chaves reais. Service role só em
 
 ## Problemas comuns
 
-- **Login (ou app) sem CSS, fonte Times, fundo branco:** o `gege-mockup.css` deve ser importado em `app/layout.tsx` **antes** de `globals.css` (import direto; evitar só `@import` dentro do `globals` no Next). Classes `.login-*` ficam em `@layer components` em `globals.css`. Depois: `npm run clean` e `npm run dev` no `frontend/`.
+- **Login (ou app) sem CSS, fonte Times, fundo branco:** em `app/layout.tsx` importar **`globals.css` antes** de `gege-mockup.css` (import direto; evitar só `@import` do mockup dentro do `globals` no Next). Classes `.login-*` ficam em `@layer components` em `globals.css`. Se só o dev quebrar: ver [css-sumiu-no-dev.md](./css-sumiu-no-dev.md) e rodar `npm run dev:reset` no `frontend/`.

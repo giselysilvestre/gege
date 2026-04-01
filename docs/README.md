@@ -9,6 +9,7 @@
 | [jornadas-gege.md](./jornadas-gege.md) | Jornadas esperadas: recrutador (app logado) e candidato (carreira). |
 | [arquitetura.md](./arquitetura.md) | Stack, pastas do repositório e fluxos técnicos resumidos. |
 | [deploy.md](./deploy.md) | Deploy em produção (Vercel, env, Supabase Auth, domínio). |
+| [css-sumiu-no-dev.md](./css-sumiu-no-dev.md) | Página sem estilo no localhost: cache `.next`, `dev:reset`. |
 | [DECISOES_TECNICAS.md](./DECISOES_TECNICAS.md) | Decisões técnicas históricas do projeto. |
 | [ESTRUTURA_DADOS_SUPABASE.md](./ESTRUTURA_DADOS_SUPABASE.md) | Estrutura de dados Supabase (referência complementar). |
 | [schema_gege.md](./schema_gege.md) / [schema_gege.csv](./schema_gege.csv) | Schema em texto/tabular. |

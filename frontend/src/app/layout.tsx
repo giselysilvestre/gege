@@ -1,8 +1,11 @@
 import type { Metadata } from 'next'
 import { Plus_Jakarta_Sans } from 'next/font/google'
-/** Tokens + classes do mockup: import direto no layout (mais fiável que @import dentro do globals no pipeline do Next). */
-import '@/styles/gege-mockup.css'
+/**
+ * Ordem: primeiro Tailwind/globals (base do app), depois tokens e componentes do mockup.
+ * Se o dev “sumir” com o CSS, rode `npm run dev:reset` na pasta frontend (cache .next).
+ */
 import './globals.css'
+import '@/styles/gege-mockup.css'
 import AppShell from '@/components/layout/AppShell'
 
 const plusJakarta = Plus_Jakarta_Sans({
