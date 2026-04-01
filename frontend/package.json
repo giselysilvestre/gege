@@ -3,7 +3,7 @@
     "version": "1.0.0",
     "private": true,
     "scripts": {
-        "clean": "node -e \"const fs=require('fs');for(const p of ['.next','node_modules/.cache']){try{fs.rmSync(p,{recursive:true,force:true});}catch(e){}}\"",
+        "clean": "node -e \"const fs=require('fs');for(const p of ['.next','node_modules/.cache','.turbo','tsconfig.tsbuildinfo']){try{fs.rmSync(p,{recursive:true,force:true});}catch(e){}}\"",
         "dev": "next dev -p 3000",
         "dev:turbo": "next dev -p 3000 --turbopack",
         "dev:clean": "npm run clean && next dev -p 3000",

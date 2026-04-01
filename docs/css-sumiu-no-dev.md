@@ -1,4 +1,22 @@
-# Página sem CSS no `localhost` (só HTML “cru”)
+# Problemas no `localhost` (sem CSS ou erro `Cannot find module './611.js'`)
+
+## Erro `Runtime Error: Cannot find module './611.js'` (ou outro número)
+
+Isso vem do **Webpack/Next**: a pasta **`.next`** ficou **inconsistente** (chunks antigos apontando para arquivos que já não existem). Comum no **Windows** depois de `git pull`, parar o servidor no meio do build ou **dois `next dev` ao mesmo tempo**.
+
+**Solução:** pare o servidor (Ctrl+C), na pasta `frontend` rode:
+
+```bash
+npm run dev:reset
+```
+
+Se ainda falhar: feche **todas** as janelas do terminal que estejam com `next dev`, confira que nada mais usa a porta **3000**, e rode de novo `npm run dev:reset`.
+
+Se o projeto foi clonado em outro PC: dentro de `frontend` rode também `npm install` para a versão do Next bater com o `package.json` (no repo é Next 15).
+
+---
+
+## Página sem CSS no `localhost` (só HTML “cru”)
 
 Isso **não é causado pelo Git commit** em si. O que costuma acontecer:
 
