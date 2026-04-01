@@ -1,4 +1,5 @@
-import { updateSession } from "@/lib/supabase/middleware";
+// Import relativo: na Vercel (Edge) o alias "@/" no middleware pode não ser resolvido e vira módulo inválido.
+import { updateSession } from "./src/lib/supabase/middleware";
 import { NextResponse, type NextRequest } from "next/server";
 
 function isStaticAsset(pathname: string) {

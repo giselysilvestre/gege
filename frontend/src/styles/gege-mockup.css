@@ -418,8 +418,7 @@ tbody tr:hover { background: var(--gray-50); }
   }
   /* Hero candidato: sem avatar no mobile; coluna do texto ocupa o espaço até o score */
   .cand-profile-hero {
-    padding-left: 16px;
-    padding-right: 16px;
+    padding: 22px 20px 20px;
   }
   .cand-profile-hero .cand-profile-avatar {
     display: none !important;
@@ -437,6 +436,7 @@ tbody tr:hover { background: var(--gray-50); }
     min-width: 0;
     width: auto;
     max-width: 100%;
+    text-align: center;
   }
   .cand-profile-mobile-top {
     display: flex;
@@ -456,12 +456,24 @@ tbody tr:hover { background: var(--gray-50); }
     width: 100%;
     max-width: 100%;
     overflow-wrap: anywhere;
+    text-align: center;
   }
   .cand-profile-meta-section {
     grid-column: unset;
     grid-row: unset;
     width: 100%;
     max-width: 100%;
+  }
+  /* Metadados e tags centralizados na coluna (mobile) */
+  .cand-profile-detail-lines {
+    justify-items: center;
+    text-align: center;
+  }
+  .cand-profile-tag-row {
+    justify-content: center;
+  }
+  .cand-profile-head-aside {
+    align-items: center;
   }
   .cand-profile-head-aside .cand-score-block {
     min-width: 92px;

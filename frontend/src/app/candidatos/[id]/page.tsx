@@ -611,7 +611,7 @@ function CandidatoPerfilInner() {
                         </div>
                         <div className="cand-profile-meta-section">
                           <div className="cand-profile-meta">{locLine || "—"}</div>
-                          <div className="cand-profile-meta" style={{ marginTop: 6, display: "grid", gap: 4 }}>
+                          <div className="cand-profile-meta cand-profile-detail-lines" style={{ marginTop: 6, display: "grid", gap: 4 }}>
                             {[c.bairro?.trim(), c.cidade?.trim(), distStr].filter(Boolean).length > 0 ? (
                               <span>{[c.bairro?.trim(), c.cidade?.trim(), distStr].filter(Boolean).join(" · ")}</span>
                             ) : null}
@@ -631,7 +631,7 @@ function CandidatoPerfilInner() {
                             ) : null}
                             {idade != null ? <span>Idade: {idade}</span> : null}
                           </div>
-                          <div className="flex g6" style={{ marginTop: 10, flexWrap: "wrap" }}>
+                          <div className="flex g6 cand-profile-tag-row" style={{ marginTop: 10, flexWrap: "wrap" }}>
                             {ep ? <span className={ep.className}>{ep.label}</span> : null}
                             {tagItems.slice(0, 6).map((t) => (
                               <span key={t} className="badge b-olive">

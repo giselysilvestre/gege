@@ -12,6 +12,21 @@ npm run dev:reset
 
 Se ainda falhar: feche **todas** as janelas do terminal que estejam com `next dev`, confira que nada mais usa a porta **3000**, e rode de novo `npm run dev:reset`.
 
+### Windows: `Internal Server Error` + `EPERM` no terminal (`.next\\server\\...`)
+
+Se o log mostrar `EPERM: operation not permitted, open '...\\.next\\server\\webpack-runtime.js'`, o **Node ainda está usando a pasta `.next`** (ou o antivírus/OneDrive está a segurar ficheiros). **Não** rode `npm run clean` com o servidor ligado.
+
+1. No terminal do `next dev`: **Ctrl+C**.
+2. Na pasta `frontend`, use o fluxo que mata quem está na porta **3000** e só depois limpa:
+
+```bash
+npm run dev:reset:win
+```
+
+(Equivale a: encerrar o que escuta em 3000 → apagar `.next` → `next dev`.)
+
+3. Se continuar: exclua a pasta `frontend\\.next` no Explorador **com todos os terminais fechados**, ou adicione `frontend\\.next` às exclusões do antivírus. Evite sincronizar a pasta do projeto com OneDrive em tempo real.
+
 Se o projeto foi clonado em outro PC: dentro de `frontend` rode também `npm install` para a versão do Next bater com o `package.json` (no repo é Next 15).
 
 ---

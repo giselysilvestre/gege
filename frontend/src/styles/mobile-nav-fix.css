@@ -1,0 +1,58 @@
+/**
+ * Barra inferior mobile: mesma altura, ícones 20px, label sempre visível.
+ * Adicione em layout.tsx após globals.css:
+ *   import '@/styles/mobile-nav-fix.css'
+ */
+@media (max-width: 900px) {
+  .mobile-bottom-nav {
+    align-items: stretch;
+    gap: 4px;
+    padding: 8px 8px;
+  }
+  .mobile-bottom-nav-item {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+    min-height: 52px;
+    padding: 6px 2px 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    line-height: 1.1;
+  }
+  .mobile-bottom-nav-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .mobile-bottom-nav-icon svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+  .mobile-bottom-nav-label {
+    display: block;
+    max-width: 100%;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1.15;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mobile-bottom-nav-item.is-active {
+    border-radius: 16px;
+    flex: 1 1 0;
+    padding-left: 2px;
+    padding-right: 2px;
+  }
+  .mobile-bottom-nav-item.is-active .mobile-bottom-nav-label {
+    color: #0f172a;
+  }
+}
