@@ -29,8 +29,9 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Refresca tokens no cookie antes de validar (evita RSC sem sessão logo após login / transição).
-  await supabase.auth.getSession();
-  const { data } = await supabase.auth.getUser();
-  return { response, user: data.user };
+  // getUser valida o JWT com o Auth (getSession confia só no cookie local).
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return { response, user: user ?? null };
 }

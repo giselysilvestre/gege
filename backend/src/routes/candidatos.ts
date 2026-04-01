@@ -4,6 +4,13 @@ import { safeClientMessage } from "../lib/safeClientMessage.js";
 import type { CandidatoInsert, CandidatoUpdate } from "../types/candidato.js";
 
 export const candidatosRouter = Router();
+const CANDIDATO_COLUMNS = "id,nome,telefone,email,cargo,cidade,score,criado_em";
+
+/** Compat: API expõe `created_at` como alias de `criado_em` (coluna real no Postgres). */
+function mapCandidatoApi(row: Record<string, unknown>) {
+  const { criado_em, ...rest } = row;
+  return { ...rest, created_at: criado_em };
+}
 
 function dbOr503(res: import("express").Response) {
   try {
@@ -19,14 +26,15 @@ candidatosRouter.get("/", async (_req, res) => {
   if (!supabase) return;
   const { data, error } = await supabase
     .from("candidatos")
-    .select("*")
-    .order("created_at", { ascending: false });
+    .select(CANDIDATO_COLUMNS)
+    .order("criado_em", { ascending: false });
 
   if (error) {
     res.status(500).json({ message: safeClientMessage(error) });
     return;
   }
-  res.json(data);
+  const rows = (data as Record<string, unknown>[] | null) ?? [];
+  res.json(rows.map(mapCandidatoApi));
 });
 
 candidatosRouter.get("/:id", async (req, res) => {
@@ -35,7 +43,7 @@ candidatosRouter.get("/:id", async (req, res) => {
   const { id } = req.params;
   const { data, error } = await supabase
     .from("candidatos")
-    .select("*")
+    .select(CANDIDATO_COLUMNS)
     .eq("id", id)
     .maybeSingle();
 
@@ -47,7 +55,7 @@ candidatosRouter.get("/:id", async (req, res) => {
     res.status(404).json({ message: "Candidato não encontrado" });
     return;
   }
-  res.json(data);
+  res.json(mapCandidatoApi(data as Record<string, unknown>));
 });
 
 candidatosRouter.post("/", async (req, res) => {
@@ -75,14 +83,14 @@ candidatosRouter.post("/", async (req, res) => {
   const { data, error } = await supabase
     .from("candidatos")
     .insert(row)
-    .select()
+    .select(CANDIDATO_COLUMNS)
     .single();
 
   if (error) {
     res.status(500).json({ message: safeClientMessage(error) });
     return;
   }
-  res.status(201).json(data);
+  res.status(201).json(mapCandidatoApi(data as Record<string, unknown>));
 });
 
 candidatosRouter.put("/:id", async (req, res) => {
@@ -127,7 +135,7 @@ candidatosRouter.put("/:id", async (req, res) => {
     .from("candidatos")
     .update(patch)
     .eq("id", id)
-    .select()
+    .select(CANDIDATO_COLUMNS)
     .maybeSingle();
 
   if (error) {
@@ -138,7 +146,7 @@ candidatosRouter.put("/:id", async (req, res) => {
     res.status(404).json({ message: "Candidato não encontrado" });
     return;
   }
-  res.json(data);
+  res.json(mapCandidatoApi(data as Record<string, unknown>));
 });
 
 candidatosRouter.delete("/:id", async (req, res) => {

@@ -50,5 +50,7 @@ app.get("/health", (_req, res) => {
 app.use("/api/candidatos", candidatosRouter);
 
 app.listen(port, "0.0.0.0", () => {
-  console.log(`Gegê API em http://127.0.0.1:${port} e http://localhost:${port}`);
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`Gegê API em http://127.0.0.1:${port} e http://localhost:${port}`);
+  }
 });

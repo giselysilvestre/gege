@@ -16,9 +16,11 @@ begin
     create type public.status_candidatura as enum (
       'novo',
       'em_triagem',
-      'aprovado',
+      'em_entrevista',
+      'em_teste',
       'reprovado',
-      'contratado'
+      'contratado',
+      'desistiu'
     );
   end if;
 end
@@ -200,10 +202,10 @@ create index if not exists idx_candidaturas_vaga_id on public.candidaturas (vaga
 create index if not exists idx_candidaturas_status on public.candidaturas (status);
 
 -- Opcional de regra de negócio: candidato só em um processo ativo por vez.
--- Considera ativo quando status está em em_triagem/aprovado.
+-- Considera ativo quando status está em em_triagem/em_entrevista/em_teste.
 create unique index if not exists uq_candidaturas_candidato_ativo
   on public.candidaturas (candidato_id)
-  where status in ('em_triagem', 'aprovado');
+  where status in ('em_triagem', 'em_entrevista', 'em_teste');
 
 -- ============================================================================
 -- TRIGGERS E FUNCOES
@@ -245,7 +247,7 @@ begin
     select 1
     from public.candidaturas c
     where c.candidato_id = p_candidato_id
-      and c.status in ('em_triagem', 'aprovado', 'contratado')
+      and c.status in ('em_triagem', 'em_entrevista', 'em_teste', 'contratado')
   )
   into v_tem_ativo;
 

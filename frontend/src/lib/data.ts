@@ -3,12 +3,22 @@ import { unstable_noStore as noStore } from "next/cache";
 import { claimsFromAccessToken } from "@/lib/claimsFromJwt";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { devError } from "@/lib/devLog";
 
 type ClienteRow = {
   id: string;
   nome_empresa: string | null;
   email: string | null;
   nome_contato: string | null;
+};
+type ClienteInsert = {
+  nome_empresa: string;
+  nome_contato: string;
+  email: string;
+  telefone: string;
+  cep: string;
+  cidade: string;
+  slug: string;
 };
 
 /** `ilike` sem coringa: escapa `%` e `_` do próprio email. */
@@ -40,10 +50,10 @@ function emailFromUser(user: User | null): string | null {
  */
 async function getAuthUserWithEmail(supabase: SupabaseClient) {
   const { data: sessData, error: sessErr } = await supabase.auth.getSession();
-  if (sessErr) console.error("[getCurrentCliente] getSession:", sessErr.message);
+  if (sessErr) devError("[getCurrentCliente] getSession:", sessErr.message);
 
   const { data: userData, error: userErr } = await supabase.auth.getUser();
-  if (userErr) console.error("[getCurrentCliente] getUser:", userErr.message);
+  if (userErr) devError("[getCurrentCliente] getUser:", userErr.message);
 
   const verified = userData.user;
   const fromCookie = sessData.session?.user ?? null;
@@ -62,7 +72,7 @@ async function selectClienteByEmail(client: SupabaseClient, emailForIlike: strin
     .limit(1);
 
   if (error) {
-    console.error("[getCurrentCliente] select clientes:", error.message, error.code);
+    devError("[getCurrentCliente] select clientes:", error.message, error.code);
     return null;
   }
   return (rows?.[0] as ClienteRow | undefined) ?? null;
@@ -77,7 +87,7 @@ async function selectClienteByEmailAdmin(admin: NonNullable<ReturnType<typeof tr
     .limit(1);
 
   if (error) {
-    console.error("[getCurrentCliente] admin select clientes:", error.message);
+    devError("[getCurrentCliente] admin select clientes:", error.message);
     return null;
   }
   const row = (rows?.[0] as ClienteRow | undefined) ?? null;
@@ -88,7 +98,7 @@ async function selectClienteByEmailAdmin(admin: NonNullable<ReturnType<typeof tr
 async function upsertClienteViaAdmin(emailRaw: string, userId: string) {
   const admin = tryAdmin();
   if (!admin) {
-    console.error("[getCurrentCliente] SUPABASE_SERVICE_ROLE_KEY ausente ou inválida — fallback admin indisponível.");
+    devError("[getCurrentCliente] SUPABASE_SERVICE_ROLE_KEY ausente ou inválida — fallback admin indisponível.");
     return null;
   }
 
@@ -100,8 +110,7 @@ async function upsertClienteViaAdmin(emailRaw: string, userId: string) {
   const slugBase = local.replace(/[^a-z0-9-]+/gi, "-").replace(/^-+|-+$/g, "") || "cliente";
   const telefonePlaceholder = userId ? `u-${userId.replace(/-/g, "")}` : `t-${Date.now()}`;
 
-  const { data: inserted, error } = await (admin.from("clientes") as any)
-    .insert({
+  const payload: ClienteInsert = {
       nome_empresa: local,
       nome_contato: local,
       email: emailKey,
@@ -109,7 +118,10 @@ async function upsertClienteViaAdmin(emailRaw: string, userId: string) {
       cep: "",
       cidade: "",
       slug: `${slugBase}-${Date.now()}`,
-    })
+    };
+  const { data: inserted, error } = await admin
+    .from("clientes")
+    .insert(payload as never)
     .select("id, nome_empresa, email, nome_contato")
     .limit(1);
 
@@ -118,7 +130,7 @@ async function upsertClienteViaAdmin(emailRaw: string, userId: string) {
   if (!error && ins) return ins;
 
   if (error) {
-    console.error("[getCurrentCliente] admin insert:", error.message, error.code);
+    devError("[getCurrentCliente] admin insert:", error.message, error.code);
     if (error.code === "23505") {
       const retry = await selectClienteByEmailAdmin(admin, emailRaw.trim());
       return retry ?? null;
@@ -163,8 +175,7 @@ export async function getCurrentCliente(supabaseClient?: SupabaseClient, opts?: 
   const slugBase = local.replace(/[^a-z0-9-]+/gi, "-").replace(/^-+|-+$/g, "") || "cliente";
   const telefonePlaceholder = `u-${user.id.replace(/-/g, "")}`;
 
-  const { data: insertedRows, error: insertError } = await (supabase.from("clientes") as any)
-    .insert({
+  const payload: ClienteInsert = {
       nome_empresa: local,
       nome_contato: local,
       email: emailKey,
@@ -172,7 +183,10 @@ export async function getCurrentCliente(supabaseClient?: SupabaseClient, opts?: 
       cep: "",
       cidade: "",
       slug: `${slugBase}-${Date.now()}`,
-    })
+    };
+  const { data: insertedRows, error: insertError } = await supabase
+    .from("clientes")
+    .insert(payload as never)
     .select("id, nome_empresa, email, nome_contato")
     .limit(1);
 
@@ -181,7 +195,7 @@ export async function getCurrentCliente(supabaseClient?: SupabaseClient, opts?: 
   if (!insertError && inserted) return inserted;
 
   if (insertError) {
-    console.error("[getCurrentCliente] insert (RLS):", insertError.message, insertError.code);
+    devError("[getCurrentCliente] insert (RLS):", insertError.message, insertError.code);
     if (insertError.code === "23505") {
       const retry = await selectClienteByEmail(supabase, email);
       if (retry) return retry;

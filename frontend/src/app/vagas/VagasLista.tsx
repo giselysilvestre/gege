@@ -1,117 +1,295 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
-import { BottomNav } from "@/components/BottomNav";
-import { JobCard, type JobCardVaga } from "@/components/JobCard";
+import { useRouter } from "next/navigation";
+import type { JobCardVaga } from "@/components/JobCard";
+import { STATUS_CONFIG, getDaysOpen } from "@/lib/status";
+import { vagaTituloPublico, vagaUnidadePublica } from "@/lib/vaga-display";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { ActiveFilterChips } from "@/components/ui/ActiveFilterChips";
+import { devError } from "@/lib/devLog";
 
 type Props = {
   initialVagas: JobCardVaga[];
   errorMessage?: string | null;
 };
 
-export function VagasLista({ initialVagas, errorMessage }: Props) {
-  const [tab, setTab] = useState<"todas" | "ativas" | "inativas">("todas");
+function etapaMaisAvancada(vaga: JobCardVaga): string {
+  const cands = vaga.candidaturas ?? [];
+  if (cands.length === 0) return "—";
+  const order: Record<string, number> = {
+    reprovado: 1,
+    desistiu: 1,
+    inscrito: 2,
+    novo: 2,
+    em_triagem: 3,
+    em_entrevista: 4,
+    entrevista: 4,
+    entrevistado: 4,
+    em_teste: 5,
+    teste: 5,
+    aprovado_teste: 5,
+    aprovado: 5,
+    contratado: 7,
+  };
+  const labels: Record<string, string> = {
+    em_triagem: "Triagem",
+    em_entrevista: "Entrevista",
+    entrevista: "Entrevista",
+    entrevistado: "Entrevista",
+    em_teste: "Teste",
+    teste: "Teste",
+    aprovado_teste: "Teste",
+    aprovado: "Teste",
+    contratado: "Contratado",
+    reprovado: "Desistiu",
+    desistiu: "Desistiu",
+    inscrito: "Inscrito",
+    novo: "Inscrito",
+  };
+  let best = 0;
+  let st = "inscrito";
+  for (const c of cands) {
+    const o = order[c.status] ?? 2;
+    if (o > best) {
+      best = o;
+      st = c.status;
+    }
+  }
+  return labels[st] ?? st;
+}
 
-  const filtered = initialVagas.filter((v) => {
-    if (tab === "ativas") return ["aberta", "em_selecao"].includes(v.status_vaga);
-    if (tab === "inativas") return ["fechada", "cancelada"].includes(v.status_vaga);
-    return true;
-  });
+function statusVagaLabel(status: string) {
+  return STATUS_CONFIG[status]?.label ?? status;
+}
+
+function statusSelectLabel(status: string) {
+  if (status === "em_selecao") return "aberta";
+  return status;
+}
+
+export function VagasLista({ initialVagas, errorMessage }: Props) {
+  const router = useRouter();
+  const [vagas, setVagas] = useState<JobCardVaga[]>(initialVagas);
+  const [q, setQ] = useState("");
+  const [unidade, setUnidade] = useState("");
+  const [statusFiltro, setStatusFiltro] = useState<"ativa" | "inativa" | "todas">("ativa");
+  const [sortBy, setSortBy] = useState<"vaga" | "unidade" | "posicoes" | "inscritos" | "etapa" | "status" | "aberto">("aberto");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const unidades = useMemo(() => {
+    const s = new Set<string>();
+    for (const v of initialVagas) {
+      const u = vagaUnidadePublica(v);
+      if (u) s.add(u);
+    }
+    return [...s].sort((a, b) => a.localeCompare(b, "pt"));
+  }, [initialVagas]);
+
+  const rows = useMemo(() => {
+    const filtered = vagas.filter((v) => {
+      const ativa = v.status_vaga === "aberta" || v.status_vaga === "em_selecao";
+      if (statusFiltro === "ativa" && !ativa) return false;
+      if (statusFiltro === "inativa" && ativa) return false;
+      const u = vagaUnidadePublica(v) ?? "";
+      if (unidade && u !== unidade) return false;
+      const needle = q.trim().toLowerCase();
+      const titulo = vagaTituloPublico(v).toLowerCase();
+      if (needle && !titulo.includes(needle) && !u.toLowerCase().includes(needle)) return false;
+      return true;
+    });
+    const stageRank: Record<string, number> = {
+      Inscrito: 1,
+      Triagem: 2,
+      Entrevista: 3,
+      Teste: 4,
+      Contratado: 5,
+      Reprovado: 0,
+      "—": -1,
+    };
+    const statusRank: Record<string, number> = { aberta: 3, em_selecao: 2, fechada: 1, cancelada: 0 };
+    const sorted = [...filtered].sort((a, b) => {
+      const aUn = vagaUnidadePublica(a) ?? "";
+      const bUn = vagaUnidadePublica(b) ?? "";
+      const aPos = (a as { quantidade_vagas?: number | null }).quantidade_vagas ?? 1;
+      const bPos = (b as { quantidade_vagas?: number | null }).quantidade_vagas ?? 1;
+      const aIns = (a.candidaturas ?? []).length;
+      const bIns = (b.candidaturas ?? []).length;
+      const aEt = etapaMaisAvancada(a);
+      const bEt = etapaMaisAvancada(b);
+      const aCriado = new Date(a.criado_em).getTime() || 0;
+      const bCriado = new Date(b.criado_em).getTime() || 0;
+      let cmp = 0;
+      if (sortBy === "vaga") cmp = vagaTituloPublico(a).localeCompare(vagaTituloPublico(b), "pt");
+      if (sortBy === "unidade") cmp = aUn.localeCompare(bUn, "pt");
+      if (sortBy === "posicoes") cmp = aPos - bPos;
+      if (sortBy === "inscritos") cmp = aIns - bIns;
+      if (sortBy === "etapa") cmp = (stageRank[aEt] ?? -1) - (stageRank[bEt] ?? -1);
+      if (sortBy === "status") cmp = (statusRank[a.status_vaga] ?? -1) - (statusRank[b.status_vaga] ?? -1);
+      if (sortBy === "aberto") cmp = aCriado - bCriado;
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return sorted;
+  }, [vagas, q, unidade, statusFiltro, sortBy, sortDir]);
+  const activeChips = [
+    ...(q.trim()
+      ? [{ key: "q", label: `Busca: ${q.trim()}`, onRemove: () => setQ("") }]
+      : []),
+    ...(unidade
+      ? [{ key: "un", label: `Unidade: ${unidade}`, onRemove: () => setUnidade("") }]
+      : []),
+    ...(statusFiltro !== "ativa"
+      ? [{ key: "st", label: `Status: ${statusFiltro}`, onRemove: () => setStatusFiltro("ativa") }]
+      : []),
+  ];
+
+  async function updateStatusVaga(vagaId: string, nextStatus: "aberta" | "fechada" | "cancelada") {
+    const ok = window.confirm(`Tem certeza que deseja mudar o status para "${nextStatus}"?`);
+    if (!ok) return;
+    const sb = getSupabaseBrowserClient();
+    const payload: { status_vaga: string; fechada_em?: string | null } = { status_vaga: nextStatus };
+    payload.fechada_em = nextStatus === "aberta" ? null : new Date().toISOString();
+    const { error } = await sb.from("vagas").update(payload).eq("id", vagaId);
+    if (error) {
+      devError("[vagas] update status:", error.message);
+      return;
+    }
+    setVagas((prev) =>
+      prev.map((v) =>
+        v.id === vagaId
+          ? { ...v, status_vaga: nextStatus, fechada_em: payload.fechada_em ?? v.fechada_em }
+          : v
+      )
+    );
+  }
+
+  function onSort(key: typeof sortBy) {
+    if (sortBy === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortBy(key);
+      setSortDir(key === "vaga" || key === "unidade" ? "asc" : "desc");
+    }
+  }
 
   return (
-    <div style={{ background: "#F9FAFB", minHeight: "100vh", paddingBottom: "80px" }}>
-      <div
-        style={{
-          background: "#fff",
-          padding: "12px 16px",
-          display: "flex",
-          alignItems: "center",
-          gap: "10px",
-          borderBottom: "1px solid #EAECF0",
-        }}
-      >
-        <Link
-          href="/dashboard"
-          style={{
-            width: "44px",
-            height: "44px",
-            borderRadius: "50%",
-            background: "#F9FAFB",
-            border: "1px solid #EAECF0",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <ChevronLeft size={16} color="#344054" />
+    <div style={{ minHeight: "100%" }}>
+      <div className="flex aic jsb mb16">
+        <Link href="/dashboard" className="btn btn-ghost btn-sm">
+          ← Voltar
         </Link>
-        <span style={{ fontSize: "17px", fontWeight: 700, color: "#101828", letterSpacing: "-0.02em" }}>Minhas vagas</span>
       </div>
-      <div
-        style={{
-          background: "#fff",
-          padding: "12px 16px",
-          display: "flex",
-          gap: "8px",
-          borderBottom: "1px solid #EAECF0",
-          flexWrap: "wrap",
+
+      <div className="search-row">
+        <input
+          className="search-input"
+          type="text"
+          placeholder="🔍  Buscar vagas..."
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <select className="search-input" style={{ maxWidth: 180 }} value={unidade} onChange={(e) => setUnidade(e.target.value)}>
+          <option value="">Todas unidades</option>
+          {unidades.map((u) => (
+            <option key={u} value={u}>
+              {u}
+            </option>
+          ))}
+        </select>
+        <select
+          className="search-input"
+          style={{ maxWidth: 140 }}
+          value={statusFiltro}
+          onChange={(e) => setStatusFiltro(e.target.value as typeof statusFiltro)}
+        >
+          <option value="ativa">Ativa</option>
+          <option value="inativa">Inativa</option>
+          <option value="todas">Todas</option>
+        </select>
+      </div>
+      <ActiveFilterChips
+        chips={activeChips}
+        onClearAll={() => {
+          setQ("");
+          setUnidade("");
+          setStatusFiltro("ativa");
         }}
-      >
-        {(
-          [
-            ["todas", "Todas"],
-            ["ativas", "Ativas"],
-            ["inativas", "Inativas"],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setTab(key)}
-            style={{
-              fontSize: "13px",
-              fontWeight: tab === key ? 600 : 500,
-              padding: "10px 16px",
-              minHeight: "44px",
-              borderRadius: "999px",
-              border: "none",
-              cursor: "pointer",
-              fontFamily: "inherit",
-              background: tab === key ? "#101828" : "transparent",
-              color: tab === key ? "#fff" : "#667085",
-            }}
-          >
-            {label}
-          </button>
-        ))}
+      />
+
+      {errorMessage ? (
+        <p className="mb16 fs13" style={{ color: "var(--danger-fg)" }}>
+          {errorMessage}
+        </p>
+      ) : null}
+
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th className="sortable" onClick={() => onSort("vaga")}>Nome da Vaga</th>
+                <th className="sortable" onClick={() => onSort("unidade")}>Unidade</th>
+                <th className="sortable" onClick={() => onSort("posicoes")}>Posições</th>
+                <th className="sortable" onClick={() => onSort("inscritos")}>Inscritos</th>
+                <th className="sortable" onClick={() => onSort("etapa")}>Etapa mais avançada</th>
+                <th className="sortable" onClick={() => onSort("status")}>Status</th>
+                <th className="sortable" onClick={() => onSort("aberto")}>Aberto em</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((v) => {
+                const cands = v.candidaturas ?? [];
+                const un = vagaUnidadePublica(v) ?? "—";
+                const pos = (v as { quantidade_vagas?: number | null }).quantidade_vagas;
+                const aberto = getDaysOpen(v.criado_em, v.status_vaga, v.fechada_em ?? null);
+                return (
+                  <tr key={v.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/candidatos?vaga=${encodeURIComponent(v.id)}`)}>
+                    <td>
+                      <Link
+                        href={`/candidatos?vaga=${encodeURIComponent(v.id)}`}
+                        className="fw6 fs13"
+                        style={{ color: "var(--gray-900)" }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {vagaTituloPublico(v)}
+                      </Link>
+                    </td>
+                    <td><span className="badge b-gray">{un}</span></td>
+                    <td className="c600 fs13">{pos != null && pos > 0 ? String(pos) : "1"}</td>
+                    <td className="c600 fs13">{cands.length}</td>
+                    <td><span className="badge b-berry">{etapaMaisAvancada(v)}</span></td>
+                    <td>
+                      <span className="badge b-gray">{statusVagaLabel(v.status_vaga)}</span>
+                    </td>
+                    <td className="c600 fs13">{aberto}</td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <select
+                        className="search-input"
+                        style={{ maxWidth: 130, height: 32, padding: "0 8px", fontSize: 12 }}
+                        value={statusSelectLabel(v.status_vaga)}
+                        onChange={(e) => {
+                          const val = e.target.value as "aberta" | "fechada" | "cancelada";
+                          if (val === statusSelectLabel(v.status_vaga)) return;
+                          void updateStatusVaga(v.id, val);
+                        }}
+                      >
+                        <option value="aberta">aberta</option>
+                        <option value="fechada">fechada</option>
+                        <option value="cancelada">cancelada</option>
+                      </select>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div style={{ padding: "12px 16px" }}>
-        {errorMessage ? (
-          <p
-            style={{
-              fontSize: "14px",
-              color: "#B42318",
-              padding: "12px",
-              background: "#FEF3F2",
-              borderRadius: "12px",
-              border: "1px solid #FECDCA",
-            }}
-          >
-            {errorMessage}
-          </p>
-        ) : null}
-        {!errorMessage && filtered.length === 0 ? (
-          <p style={{ fontSize: "14px", color: "#667085", padding: "16px 0" }}>
-            Nenhuma vaga nesta aba. Use &quot;+ Abrir nova vaga&quot; no início.
-          </p>
-        ) : null}
-        {filtered.map((v) => (
-          <JobCard key={v.id} vaga={v} />
-        ))}
-      </div>
-      <BottomNav />
+
+      {!errorMessage && rows.length === 0 ? (
+        <p className="fs13 muted mt16">Nenhuma vaga encontrada. Crie uma em &quot;+ Nova Vaga&quot; na barra superior.</p>
+      ) : null}
     </div>
   );
 }

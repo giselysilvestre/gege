@@ -1,27 +1,26 @@
-import type { Metadata } from "next";
-import "./globals.css";
+import type { Metadata } from 'next'
+import { Plus_Jakarta_Sans } from 'next/font/google'
+import './globals.css'
+import AppShell from '@/components/layout/AppShell'
+
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  display: 'swap',
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-gege-sans',
+})
 
 export const metadata: Metadata = {
-  title: "Gegê",
-  description: "Recrutamento inteligente para food service",
-};
+  title: 'gegê — Recrutamento',
+  description: 'Recrutamento inteligente para food service',
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR">
-      <body>
-        <div
-          style={{
-            maxWidth: "390px",
-            margin: "0 auto",
-            minHeight: "100vh",
-            background: "#F9FAFB",
-            position: "relative",
-          }}
-        >
-          {children}
-        </div>
+    <html lang="pt-BR" className={plusJakarta.variable}>
+      <body className={plusJakarta.className}>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
-  );
+  )
 }

@@ -10,6 +10,21 @@ const backendOrigin = `http://127.0.0.1:${backendPort}`;
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
+    ];
+  },
+  /** Evita chunks quebrados (ENOENT em vendor-chunks/@supabase) no dev no Windows. */
+  transpilePackages: ["@supabase/supabase-js", "@supabase/ssr"],
   /** Monorepo: evita aviso de múltiplos lockfiles na raiz `gege/`. */
   outputFileTracingRoot: path.join(__dirname, ".."),
   /**

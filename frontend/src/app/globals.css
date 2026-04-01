@@ -1,11 +1,12 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+@import "../styles/gege-mockup.css";
+
 :root {
-  --n25: #fcfcfd;
-  --n50: #f9fafb;
+  --n25:  #fcfcfd;
+  --n50:  #f9fafb;
   --n100: #f2f4f7;
   --n200: #eaecf0;
   --n300: #d0d5dd;
@@ -16,65 +17,221 @@
   --n800: #1d2939;
   --n900: #101828;
   --white: #ffffff;
+  --berry:       #6B2D5B;
+  --berry-dark:  #4E1F43;
+  --berry-light: #F3E8F0;
+  --berry-mid:   #C88DB8;
+  --olive:       #AFAB23;
+  --olive-dark:  #7D7A18;
+  --olive-light: #F4F7E4;
+  --olive-mid:   #D4DC6B;
+  --sidebar-w: 228px;
+  --topbar-h:  56px;
+  /* Mesma família do next/font (layout.tsx); substitui o --font do gege-mockup */
+  --font: var(--font-gege-sans), system-ui, sans-serif;
+  --overlay-dark: rgba(16, 24, 40, 0.45);
+  --panel-shadow: -4px 0 24px rgba(16, 24, 40, 0.12);
+  --card-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --danger-strong: #b42318;
+  --warning-bg-soft: #fffbf5;
+  --warning-border-soft: #f5d6a6;
+  --warn-border: #fedf89;
+  --status-interview-bg: #dcfce7;
+  --status-interview-fg: #16a34a;
+  --status-test-bg: #fef3c7;
+  --status-test-fg: #92400e;
+  --status-neutral-bg: #eeeaef;
+  --status-neutral-fg: #333333;
+  --status-lavender-fg: #6b5fa0;
+  --status-open-bg: #fdf0eb;
+  --status-employed-bg: #eff8ff;
+  --status-employed-fg: #026aa2;
+  --status-employed-border: #b2ddff;
+  --white-72: rgba(255, 255, 255, 0.72);
+  --login-card-shadow: 0 20px 60px rgba(46, 18, 40, 0.3);
+  --sidebar-icon-muted: rgba(255, 255, 255, 0.55);
+  --sidebar-active-bg: rgba(212, 220, 107, 0.18);
+  --sidebar-profile-bg: rgba(255, 255, 255, 0.08);
+  --menu-shadow: 0 8px 24px rgba(16, 24, 40, 0.14);
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
 html {
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-body {
-  background-color: var(--n50);
+/* Alinhado ao mockup HTML (--gray-100) */
+body { background-color: var(--gray-100); color: var(--n900); }
+a { color: inherit; text-decoration: none; }
+
+/* --------------------------------------------------------------------------
+   Login — classes dedicadas (hex explícitos).
+   O preflight do Tailwind zera border em * e deixa submit com fundo transparente;
+   variáveis CSS em estilos inline também podem falhar se :root não aplicar a tempo.
+   -------------------------------------------------------------------------- */
+.login-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(1200px 520px at 20% -10%, rgba(212, 220, 107, 0.16), transparent 55%),
+    radial-gradient(900px 420px at 100% 100%, rgba(200, 141, 184, 0.22), transparent 60%),
+    linear-gradient(160deg, var(--berry-dark) 0%, var(--berry) 48%, #7c3e6a 100%);
+  padding: 24px;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Logo branco sobre preto: screen “remove” o preto no fundo roxo (efeito sem fundo) */
+.login-logo-wordmark {
+  width: min(260px, 88vw);
+  height: auto;
+  max-height: 80px;
+  margin-bottom: 10px;
+  mix-blend-mode: normal;
+  opacity: 1;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.22));
+}
+
+.login-tagline {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.82);
+  letter-spacing: 0.2px;
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+/* Sidebar ~228px: logo legível, alinhada ao mockup (antes h-[28px] ficava minúscula vs login) */
+.sb-logo-wordmark {
+  display: block;
+  height: 44px;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  object-position: left center;
+  mix-blend-mode: normal;
+  opacity: 1;
+}
+
+.login-card {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 24px;
+  padding: 34px 32px;
+  width: 100%;
+  max-width: 392px;
+  box-shadow: 0 24px 70px rgba(37, 11, 31, 0.32);
+  backdrop-filter: blur(8px);
+}
+
+.login-card h2 {
+  font-size: 22px;
+  font-weight: 800;
+  margin-bottom: 2px;
   color: var(--n900);
+  letter-spacing: -0.01em;
 }
 
-a {
-  color: inherit;
+.login-card .login-lead {
+  font-size: 13px;
+  color: var(--n500);
+  margin-bottom: 24px;
 }
 
-/* Login, nova vaga e formulários legados */
-@layer components {
-  .gege-input {
-    width: 100%;
-    border: 1px solid var(--n200);
-    border-radius: 8px;
-    padding: 0.75rem 1rem;
-    font-size: 0.875rem;
-    background-color: var(--n50);
-    color: var(--n900);
-    outline: none;
-    min-height: 44px;
-  }
-  .gege-input:focus {
-    border-color: var(--n900);
-  }
-  .gege-btn-primary {
-    display: inline-flex;
-    width: 100%;
-    align-items: center;
-    justify-content: center;
-    border-radius: 8px;
-    background-color: var(--n900);
-    padding: 0.875rem 1.5rem;
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--white);
-    border: none;
-    cursor: pointer;
-    min-height: 48px;
-    transition: background-color 0.15s ease;
-  }
-  .gege-btn-primary:hover {
-    background-color: var(--n800);
-  }
-  .gege-btn-primary:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
+.login-forgot-wrap {
+  margin-top: 14px;
+  text-align: center;
 }
+
+.login-forgot {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--berry);
+}
+
+.login-forgot:hover {
+  text-decoration: underline;
+}
+
+.login-field {
+  margin-bottom: 16px;
+}
+
+.login-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--n600);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.login-card input[type='email'],
+.login-card input[type='password'] {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid var(--n200);
+  border-radius: 12px;
+  font-size: 14px;
+  color: var(--n900);
+  background: #fff;
+  outline: none;
+  box-sizing: border-box;
+  font-family: inherit;
+  line-height: 1.4;
+  min-height: 44px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.login-card input[type='email']:focus,
+.login-card input[type='password']:focus {
+  border-color: var(--berry);
+  background: var(--white);
+  box-shadow: 0 0 0 4px rgba(107, 45, 91, 0.11);
+}
+
+.login-card button.login-submit {
+  width: 100%;
+  padding: 13px;
+  margin-top: 8px;
+  background: linear-gradient(135deg, var(--berry) 0%, #7d3a68 100%);
+  color: var(--white);
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  min-height: 48px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.login-card button.login-submit:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--berry-dark) 0%, #6b2d5b 100%);
+  transform: translateY(-1px);
+}
+
+.login-card button.login-submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.login-error {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--danger-strong);
+}
+

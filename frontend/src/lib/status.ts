@@ -1,11 +1,11 @@
 export const STATUS_CONFIG: Record<string, { label: string; bg: string; color: string; border: string }> = {
-  aberta: { label: "Nova", bg: "#101828", color: "#fff", border: "transparent" },
-  em_selecao: { label: "Em seleção", bg: "#F0F9FF", color: "#026AA2", border: "#B9E6FE" },
-  em_triagem: { label: "Em triagem", bg: "#F0F9FF", color: "#026AA2", border: "#B9E6FE" },
-  em_entrevista: { label: "Em entrevista", bg: "#ECFDF3", color: "#027A48", border: "#A9EFC5" },
-  em_teste: { label: "Em teste", bg: "#FFFAEB", color: "#B54708", border: "#FEDF89" },
-  fechada: { label: "Fechada", bg: "#F2F4F7", color: "#344054", border: "#D0D5DD" },
-  cancelada: { label: "Congelada", bg: "#F5F3FF", color: "#5925DC", border: "#D9D6FE" },
+  aberta: { label: "Nova", bg: "var(--n900)", color: "var(--white)", border: "transparent" },
+  em_selecao: { label: "Em seleção", bg: "var(--info-bg)", color: "var(--info-fg)", border: "var(--status-employed-border)" },
+  em_triagem: { label: "Em triagem", bg: "var(--info-bg)", color: "var(--info-fg)", border: "var(--status-employed-border)" },
+  em_entrevista: { label: "Em entrevista", bg: "var(--success-bg)", color: "var(--success-fg)", border: "var(--olive-mid)" },
+  em_teste: { label: "Em teste", bg: "var(--warn-bg)", color: "var(--warn-fg)", border: "var(--warn-border)" },
+  fechada: { label: "Fechada", bg: "var(--n100)", color: "var(--n700)", border: "var(--n300)" },
+  cancelada: { label: "Congelada", bg: "var(--berry-light)", color: "var(--berry-dark)", border: "var(--berry-mid)" },
 };
 
 export function getDaysOpen(createdAt: string | undefined | null, status: string, closedAt?: string | null): string {

@@ -49,7 +49,7 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Tudo, exceto ficheiros internos do Next em /_next/…
+     * Tudo, exceto arquivos internos do Next em /_next/…
      * (chunks, HMR, source maps). Assim o browser nunca recebe HTML de /login
      * no lugar de um .js.
      */

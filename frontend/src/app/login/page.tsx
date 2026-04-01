@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -19,6 +20,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
+    let redirecting = false;
     try {
       const supabase = getSupabaseBrowserClient();
       const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
@@ -26,108 +28,90 @@ export default function LoginPage() {
         password: senha,
       });
       if (signInError) throw signInError;
-
-      if (!authData?.session) {
-        throw new Error(
-          "Sessão não foi criada. Se o e-mail precisa ser confirmado, abra o link enviado pelo Supabase ou desative a confirmação em Authentication > Providers > Email."
-        );
-      }
-
-      const { data: check } = await supabase.auth.getSession();
-      if (!check.session) {
-        throw new Error("Não foi possível gravar o login neste navegador. Tente limpar cookies do site ou outro navegador.");
-      }
-
-      await new Promise((r) => setTimeout(r, 100));
-      window.location.replace(`${window.location.origin}${safeNextPath()}`);
+      if (!authData?.session) throw new Error("Sessão não foi criada.");
+      const { data: check, error: sessionErr } = await supabase.auth.getSession();
+      if (sessionErr) throw sessionErr;
+      if (!check.session) throw new Error("Não foi possível gravar o login. Tente limpar cookies.");
+      redirecting = true;
+      await new Promise((r) => setTimeout(r, 0));
+      window.location.assign(`${window.location.origin}${safeNextPath()}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao entrar");
     } finally {
-      setLoading(false);
+      if (!redirecting) setLoading(false);
     }
   }
 
   return (
-    <main
-      style={{
-        display: "flex",
-        minHeight: "100vh",
-        flexDirection: "column",
-        padding: "48px 16px 40px",
-        background: "#F9FAFB",
-      }}
-    >
-      <div
-        style={{
-          margin: "0 auto",
-          width: "100%",
-          maxWidth: "360px",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-        }}
-      >
-        <div style={{ marginBottom: "32px" }}>
-          <img
-            src="/branding/logo-gege.png"
-            alt="Gegê"
-            width={160}
-            height={48}
-            style={{ height: "48px", width: "auto", maxWidth: "200px", objectFit: "contain", display: "block" }}
+    <main className="login-shell">
+      <Image
+        src="/branding/logo-gege-wordmark-light.png"
+        alt="gegê"
+        width={280}
+        height={84}
+        priority
+        className="login-logo-wordmark"
+      />
+      <p className="login-tagline">monte sua equipe!</p>
+
+      <form className="login-card" onSubmit={onSubmit} autoComplete="on" method="post">
+        <h2>Entrar</h2>
+        <p className="login-lead">Acesse com seu email</p>
+
+        <div className="login-field">
+          <label htmlFor="login-email">Email</label>
+          <input
+            id="login-email"
+            name="username"
+            type="email"
+            autoComplete="username"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
           />
         </div>
-        <p style={{ marginBottom: "32px", textAlign: "center", fontSize: "14px", fontWeight: 500, color: "#667085" }}>
-          Painel do recrutador
-        </p>
-
-        <form
-          onSubmit={onSubmit}
+        <div className="login-field" style={{ marginBottom: 8 }}>
+          <label htmlFor="login-senha">Senha</label>
+          <input
+            id="login-senha"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            value={senha}
+            onChange={(e) => setSenha(e.target.value)}
+            required
+          />
+        </div>
+        <input
+          type="text"
+          name="email"
+          autoComplete="username"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          tabIndex={-1}
+          aria-hidden="true"
           style={{
-            width: "100%",
-            borderRadius: "16px",
-            border: "1px solid #EAECF0",
-            background: "#fff",
-            padding: "32px",
+            position: "absolute",
+            opacity: 0,
+            pointerEvents: "none",
+            width: 1,
+            height: 1,
+            margin: 0,
+            border: 0,
+            padding: 0,
           }}
-        >
-          <div style={{ marginBottom: "16px" }}>
-            <label htmlFor="login-email" style={{ marginBottom: "8px", display: "block", fontSize: "12px", fontWeight: 600, color: "#101828" }}>
-              Email
-            </label>
-            <input
-              id="login-email"
-              className="gege-input"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div style={{ marginBottom: "24px" }}>
-            <label htmlFor="login-senha" style={{ marginBottom: "8px", display: "block", fontSize: "12px", fontWeight: 600, color: "#101828" }}>
-              Senha
-            </label>
-            <input
-              id="login-senha"
-              className="gege-input"
-              type="password"
-              autoComplete="current-password"
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-              required
-            />
-          </div>
-          <button className="gege-btn-primary" disabled={loading} type="submit">
-            {loading ? "Entrando…" : "Entrar"}
+        />
+
+        <button type="submit" className="login-submit" disabled={loading}>
+          {loading ? "Entrando…" : "Entrar"}
+        </button>
+        <p className="login-forgot-wrap">
+          <button type="button" className="login-forgot">
+            Esqueceu a senha?
           </button>
-          {error ? (
-            <p style={{ marginTop: "16px", textAlign: "center", fontSize: "13px", fontWeight: 500, color: "#B42318" }} role="alert">
-              {error}
-            </p>
-          ) : null}
-        </form>
-      </div>
+        </p>
+        {error ? <p className="login-error">{error}</p> : null}
+      </form>
     </main>
   );
 }

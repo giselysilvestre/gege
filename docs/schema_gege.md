@@ -1,0 +1,103 @@
+## Schema do banco de dados (Gegê)
+
+Cada tabela abaixo está documentada com:
+- **tabela**: nome da tabela
+- **campo**: nome do campo
+- **tipo**: `text`/`integer`/`boolean`/`jsonb`/`uuid`/`timestamptz`/`date`/`numeric`
+- **obrigatorio**: `sim`/`não`
+- **fonte**: CV / WhatsApp-triagem / WhatsApp-entrevista / IA / Sistema / Manual
+- **descricao**: explicação em português + regras de negócio quando relevante
+
+---
+
+## Tabela: `candidatos`
+
+| tabela | campo | tipo | obrigatorio | fonte | descricao |
+|---|---|---|---|---|---|
+| candidatos | id | uuid | sim | Sistema | Identificador único (UUID) do candidato. |
+| candidatos | nome | text | sim | CV | Nome completo do candidato. Deve ser salvo com capitalização adequada quando possível. |
+| candidatos | telefone | text | não | CV | Telefone principal. Preferência de formato: +55 DD 9XXXX-XXXX. Se ausente no CV, pode ser preenchido em triagem/entrevista. |
+| candidatos | email | text | não | CV | Email do candidato em minúsculo e sem espaços. Usado para deduplicação (evitar duplicar candidatos). |
+| candidatos | cidade | text | não | CV | Cidade de residência (quando explícita no CV). |
+| candidatos | bairro | text | não | CV | Bairro (somente se explícito no CV). Não inferir. |
+| candidatos | cep | text | não | CV | CEP (somente se explícito no CV). Não inferir. |
+| candidatos | cpf | text | não | WhatsApp-triagem | CPF do candidato. Coletado na triagem via WhatsApp. Dado sensível — armazenar apenas quando necessário. |
+| candidatos | data_nascimento | date | não | WhatsApp-triagem | Data de nascimento. Coletada na triagem ou entrevista. Não inferir do CV. |
+| candidatos | genero | text | não | WhatsApp-triagem | Gênero declarado pelo candidato. Não inferir. Valores esperados: Masculino, Feminino, Não informado. |
+| candidatos | escolaridade | text | não | CV | Nível mais alto de escolaridade concluído ou em andamento (ex.: Médio completo, Superior cursando). |
+| candidatos | cargo_principal | text | não | IA | Cargo principal do candidato (síntese). Pode vir da IA a partir do histórico do CV/entrevista. |
+| candidatos | origem | text | não | Sistema | Origem do candidato (ex.: Indeed, Vagas.com, Catho, InfoJobs). Regra: derivar do domínio do remetente quando vier por email. |
+| candidatos | curriculo_url | text | não | Sistema | URL pública do currículo armazenado (ex.: Google Drive/Storage). Deve apontar para o PDF original do CV. |
+| candidatos | gmail_message_id | text | não | Sistema | ID da mensagem no Gmail que originou o processamento. Ajuda rastreabilidade e evitar reprocessamento. |
+| candidatos | disponivel | boolean | sim | Sistema | Indica se o candidato está disponível para novos processos. Pode ser sincronizado automaticamente a partir de candidaturas ativas. |
+| candidatos | criado_em | timestamptz | sim | Sistema | Data/hora de criação do registro. |
+| candidatos | atualizado_em | timestamptz | sim | Sistema | Data/hora da última atualização do registro. |
+
+---
+
+## Tabela: `candidatos_experiencia`
+
+| tabela | campo | tipo | obrigatorio | fonte | descricao |
+|---|---|---|---|---|---|
+| candidatos_experiencia | id | uuid | sim | Sistema | Identificador único (UUID) do item de experiência. |
+| candidatos_experiencia | candidato_id | uuid | sim | Sistema | Chave estrangeira (FK) para candidatos.id, indicando de qual candidato é esta experiência. |
+| candidatos_experiencia | empresa | text | sim | CV | Nome da empresa onde trabalhou. |
+| candidatos_experiencia | cargo | text | não | CV | Cargo/função exercida na empresa. |
+| candidatos_experiencia | setor | text | sim | IA | Setor categorizado (enum): alimentacao/atendimento/cozinha/lideranca/outro. Regra: classificar pelo contexto da empresa/cargo e responsabilidades. |
+| candidatos_experiencia | data_inicio | date | não | CV | Data de início do vínculo (quando explícita). |
+| candidatos_experiencia | data_fim | date | não | CV | Data de fim do vínculo. Se vazio/nulo e houver indicação de atual, significa emprego atual. |
+| candidatos_experiencia | meses | integer | não | IA | Duração do vínculo em meses (calculada a partir das datas ou informada pelo CV). |
+| candidatos_experiencia | eh_lideranca | boolean | não | IA | Indica se a experiência tem componente de liderança (true/false) com base no cargo e evidências. |
+| candidatos_experiencia | crescimento_interno | boolean | não | IA | Indica se houve promoção/progressão de cargo dentro desta empresa (true/false). O detalhamento da progressão fica em candidatos_analise. |
+
+---
+
+## Tabela: `candidatos_analise`
+
+| tabela | campo | tipo | obrigatorio | fonte | descricao |
+|---|---|---|---|---|---|
+| candidatos_analise | id | uuid | sim | Sistema | Identificador único (UUID) da análise. |
+| candidatos_analise | candidato_id | uuid | sim | Sistema | Chave estrangeira (FK) para candidatos.id. |
+| candidatos_analise | perfil_resumo | text | não | IA | Resumo curto do perfil (2–4 linhas) como recrutador. |
+| candidatos_analise | pontos_fortes | text | não | IA | Lista/resumo dos pontos fortes com base em evidências do CV/entrevista. |
+| candidatos_analise | red_flags | text | não | IA | Sinais de alerta (ex.: instabilidade, lacunas sem explicação, inconsistências). Deve referenciar evidências. |
+| candidatos_analise | fit_food_service | text | não | IA | Enum: Alto/Médio/Baixo. Critérios: experiência relevante (cozinha/atendimento/alimentação), estabilidade, postura, sinais de ritmo operacional. |
+| candidatos_analise | analise_completa | text | não | IA | Parecer detalhado (mais longo), juntando CV e entrevista quando houver. |
+| candidatos_analise | score_ia | integer | não | IA | Score inicial calculado pela IA (0–100) a partir do CV (antes da entrevista). |
+| candidatos_analise | score_pos_entrevista | integer | não | IA | Score pós-entrevista (0–100), refletindo respostas e comportamento. |
+| candidatos_analise | score_final | numeric | não | Sistema | Campo calculado: 40% score_ia + 60% score_pos_entrevista. Fórmula: score_final = 0.4*score_ia + 0.6*score_pos_entrevista. |
+| candidatos_analise | tags | text[] | não | IA | Array fechado (tags): crescimento/food/lideranca/alerta_instabilidade/primeiro_emprego. Regras: crescimento (promoções), food (experiência forte em alimentação), lideranca (responsabilidade por equipe), alerta_instabilidade (muitos vínculos curtos), primeiro_emprego (pouca ou nenhuma experiência). |
+| candidatos_analise | modelo_usado | text | não | Sistema | Modelo de IA usado na análise (ex.: claude-sonnet-4-20250514). |
+| candidatos_analise | processado_em | timestamptz | não | Sistema | Quando a análise foi gerada. |
+| candidatos_analise | momento_profissional | text | não | WhatsApp-entrevista | Momento profissional relatado (ex.: buscando recolocação, transição, necessidade de renda). |
+| candidatos_analise | ultima_experiencia | text | não | IA | Resumo da experiência mais recente (empresa/cargo/duração), com evidência. |
+| candidatos_analise | motivo_saida | text | não | WhatsApp-entrevista | Motivo de saída do último emprego. Preencher apenas se explicitamente mencionado. |
+| candidatos_analise | pontos_positivos | text | não | WhatsApp-entrevista | Pontos positivos do último trabalho, na visão do candidato. |
+| candidatos_analise | pontos_melhoria | text | não | WhatsApp-entrevista | O que poderia melhorar no último trabalho/ambiente, com sinais de maturidade e postura. |
+| candidatos_analise | o_que_fazia | text | não | WhatsApp-entrevista | Descrição do que fazia no trabalho (rotina/responsabilidades). |
+| candidatos_analise | o_que_gostava | text | não | WhatsApp-entrevista | O que gostava de fazer no trabalho (indicadores de fit). |
+| candidatos_analise | relacao_colegas | text | não | WhatsApp-entrevista | Como descreve relacionamento com colegas/liderança (sinais de trabalho em equipe). |
+| candidatos_analise | significado_trabalho | text | não | WhatsApp-entrevista | O que trabalho significa para a pessoa (motivadores). |
+| candidatos_analise | objetivo_profissional | text | não | WhatsApp-entrevista | Objetivo profissional declarado (curto/médio prazo). |
+| candidatos_analise | disponibilidade_horario | text | não | WhatsApp-triagem | Disponibilidade de horário declarada (turnos/escala). |
+| candidatos_analise | composicao_familiar | text | não | WhatsApp-triagem | Composição familiar (quando coletada). Opcional e sensível. |
+| candidatos_analise | perguntas_especificas | jsonb | não | WhatsApp-entrevista | Respostas às perguntas específicas por cargo coletadas na entrevista WhatsApp. Exemplo: {"experiencia_lideranca": "Liderava equipe de 5 pessoas no turno da noite", "processos_importantes": "Controle de estoque e fechamento de caixa"}. Aplicável apenas para cargos de supervisão, gerência ou cozinha. |
+| candidatos_analise | analise_pos_entrevista | text | não | IA | Síntese final pós-entrevista, incluindo sinais comportamentais, estabilidade e red flags. |
+
+---
+
+## Tabela: `candidaturas`
+
+| tabela | campo | tipo | obrigatorio | fonte | descricao |
+|---|---|---|---|---|---|
+| candidaturas | id | uuid | sim | Sistema | Identificador único (UUID) da candidatura (candidato x vaga). |
+| candidaturas | candidato_id | uuid | sim | Sistema | Chave estrangeira (FK) para candidatos.id. |
+| candidaturas | vaga_id | uuid | sim | Sistema | Chave estrangeira (FK) para vagas.id. |
+| candidaturas | status | text | sim | Sistema | Status do processo (enum): novo/em_triagem/aprovado/contratado/encerrado/inativo. Regra: reflete etapa do funil; encerrado/inativo indicam fim do processo. |
+| candidaturas | score_compatibilidade | integer | não | IA | Score de compatibilidade (0–100) do candidato para a vaga específica, calculado pela IA. |
+| candidaturas | distancia_km | numeric | não | Sistema | Distância estimada em km entre candidato e local da vaga (quando disponível). |
+| candidaturas | observacao | text | não | Manual | Anotações do recrutador sobre esta candidatura. |
+| candidaturas | tags | text | não | IA | Tags da candidatura (ex.: match, alerta instabilidade, experiente food service). Regra: derivadas do cálculo de score/heurísticas da vaga. |
+| candidaturas | enviado_em | timestamptz | sim | Sistema | Data/hora em que o candidato foi inscrito/enviado para a vaga. |
+| candidaturas | atualizado_em | timestamptz | sim | Sistema | Data/hora da última atualização da candidatura. |
+

@@ -1,0 +1,608 @@
+
+/* ============================================================
+   1. DESIGN TOKENS
+   ============================================================ */
+:root {
+  /* Brand */
+  --berry:        #6B2D5B;
+  --berry-dark:   #4E1F43;
+  --berry-light:  #F3E8F0;
+  --berry-mid:    #C88DB8;
+  --olive:        #AFAB23;
+  --olive-dark:   #7D7A18;
+  --olive-light:  #F4F7E4;
+  --olive-mid:    #D4DC6B;
+  /* Neutrals */
+  --white:        #FFFFFF;
+  --gray-50:      #FAFAFA;
+  --gray-100:     #F4F5F7;
+  --gray-200:     #E8EAED;
+  --gray-300:     #D1D5DB;
+  --gray-400:     #9CA3AF;
+  --gray-500:     #6B7280;
+  --gray-600:     #4B5563;
+  --gray-700:     #374151;
+  --gray-800:     #1F2937;
+  --gray-900:     #111827;
+  /* Semantics */
+  --success-bg:   #F0FDF4; --success-fg: #166534;
+  --warn-bg:      #FFFBEB; --warn-fg:    #92400E;
+  --danger-bg:    #FEF2F2; --danger-fg:  #991B1B;
+  --info-bg:      #EFF6FF; --info-fg:    #1D4ED8;
+  --warn-border:  #FEDF89;
+  --danger-700:   #B91C1C;
+  --danger-200:   #FECACA;
+  --success-700:  #15803D;
+  --wa-green:     #25D366;
+  --wa-green-dark:#1EBE5D;
+  --score-mid-border: #FCD34D;
+  --score-low-border: #FCA5A5;
+  /* Layout */
+  --sidebar-w:    228px;
+  --topbar-h:     56px;
+  --radius-sm:    8px;
+  --radius-md:    12px;
+  --radius-lg:    16px;
+  --radius-xl:    24px;
+  --radius-pill:  100px;
+  --font:         'Plus Jakarta Sans', sans-serif;
+}
+
+/* 2–4: reset, login e app shell — omitidos no Next (globals + AppShell + login próprios) */
+
+.form-input {
+  width: 100%; padding: 11px 14px;
+  border: 1.5px solid var(--gray-200); border-radius: var(--radius-md);
+  font-family: var(--font); font-size: 14px; color: var(--gray-900);
+  background: var(--gray-50); outline: none; transition: border-color 0.15s;
+}
+.form-input:focus { border-color: var(--berry); background: white; }
+select.form-input { cursor: pointer; }
+textarea.form-input { resize: vertical; line-height: 1.6; }
+
+/* ============================================================
+   5. BUTTONS
+   ============================================================ */
+.btn {
+  font-family: var(--font); font-size: 13px; font-weight: 600;
+  padding: 8px 16px; border-radius: var(--radius-pill);
+  cursor: pointer; border: none; transition: all 0.15s;
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.btn-primary   { background: var(--olive);       color: white; }
+.btn-primary:hover { background: var(--olive-dark); }
+.btn-berry     { background: var(--berry);       color: white; }
+.btn-berry:hover   { background: var(--berry-dark); }
+.btn-ghost     { background: white; color: var(--gray-600); border: 1.5px solid var(--gray-300); }
+.btn-ghost:hover   { border-color: var(--gray-400); color: var(--gray-800); }
+.btn-danger    { background: transparent; color: var(--danger-700); border: 1.5px solid var(--danger-200); }
+.btn-sm  { font-size: 12px; padding: 6px 13px; }
+.btn-xs  { font-size: 11px; padding: 4px 10px; }
+.btn-whatsapp  { background: var(--wa-green); color: white; }
+.btn-whatsapp:hover { background: var(--wa-green-dark); }
+
+/* ============================================================
+   6. BADGES
+   ============================================================ */
+.badge {
+  display: inline-flex; align-items: center;
+  font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: var(--radius-pill);
+}
+.b-olive   { background: var(--olive-light); color: var(--olive-dark); }
+.b-berry   { background: var(--berry-light); color: var(--berry-dark); }
+.b-gray    { background: var(--gray-100);    color: var(--gray-500); }
+.b-green   { background: var(--success-bg);  color: var(--success-fg); }
+.b-amber   { background: var(--warn-bg);     color: var(--warn-fg); }
+.b-red     { background: var(--danger-bg);   color: var(--danger-fg); }
+.b-blue    { background: var(--info-bg);     color: var(--info-fg); }
+
+/* ============================================================
+   7. CARDS & LAYOUT
+   ============================================================ */
+.card    { background: white; border-radius: var(--radius-lg); border: 1px solid var(--gray-200); padding: 20px; }
+.card-sm { background: white; border-radius: var(--radius-lg); border: 1px solid var(--gray-200); padding: 16px; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr;     gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; }
+@media (max-width: 900px) {
+  .grid-2 { grid-template-columns: 1fr; }
+  .grid-3 { grid-template-columns: 1fr; }
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ============================================================
+   8. METRIC CARDS (dashboard)
+   ============================================================ */
+.metric { background: white; border-radius: var(--radius-lg); border: 1px solid var(--gray-200); padding: 18px 20px; }
+.metric-label { font-size: 11px; font-weight: 700; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px; }
+.metric-value { font-size: 32px; font-weight: 800; letter-spacing: -1.5px; line-height: 1; }
+.metric-sub   { font-size: 12px; color: var(--gray-400); margin-top: 5px; }
+.metric-up    { color: var(--success-700); }
+.metric-dn    { color: var(--danger-700); }
+
+/* ============================================================
+   9. FUNNEL
+   ============================================================ */
+.funnel-row   { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+.funnel-label { font-size: 12px; color: var(--gray-500); min-width: 100px; font-weight: 500; }
+.funnel-track { flex: 1; height: 6px; background: var(--gray-200); border-radius: 4px; overflow: hidden; }
+.funnel-fill  { height: 100%; border-radius: 4px; background: var(--olive); }
+.funnel-n     { font-size: 12px; font-weight: 700; color: var(--gray-700); min-width: 30px; text-align: right; }
+
+/* ============================================================
+   10. TABLES
+   ============================================================ */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+thead th {
+  padding: 10px 14px; font-size: 11px; font-weight: 700;
+  color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--gray-200); text-align: left;
+  white-space: nowrap; background: var(--gray-50);
+}
+tbody td { padding: 13px 14px; border-bottom: 1px solid var(--gray-100); vertical-align: middle; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr { cursor: pointer; transition: background 0.1s; }
+tbody tr:hover { background: var(--gray-50); }
+.sortable { cursor: pointer; user-select: none; }
+.sort-arrow { font-size: 9px; margin-left: 3px; opacity: 0.4; }
+.sort-arrow.on { opacity: 1; color: var(--olive-dark); }
+
+/* ============================================================
+   11. AVATAR
+   ============================================================ */
+.av {
+  width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; flex-shrink: 0;
+  background: var(--gray-100); color: var(--gray-600);
+}
+.av-lg { width: 52px; height: 52px; font-size: 16px; }
+
+/* ============================================================
+   12. CANDIDATE / VAGA DETAIL COMPONENTS
+   ============================================================ */
+.cand-loc { font-size: 11px; color: var(--gray-400); margin-top: 1px; }
+
+/* Score circle */
+.score {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 50%;
+  font-size: 13px; font-weight: 800;
+  border: 2.5px solid var(--olive); background: var(--olive-light); color: var(--gray-900);
+}
+.score.mid { border-color: var(--score-mid-border); background: var(--warn-bg); color: var(--warn-fg); }
+.score.low { border-color: var(--score-low-border); background: var(--danger-bg); color: var(--danger-700); }
+.score-xl  { width: 68px; height: 68px; font-size: 22px; }
+.score-na {
+  border-color: var(--gray-200);
+  background: var(--gray-50);
+  color: var(--gray-500);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* Perfil candidato — hero */
+.cand-profile-hero {
+  padding: 24px 26px 20px;
+  border-radius: 18px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+  border-color: var(--gray-100);
+}
+.cand-profile-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px 28px;
+  flex-wrap: wrap;
+  padding-bottom: 18px;
+}
+.cand-profile-avatar {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+.cand-profile-name {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 750;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+  color: var(--gray-900);
+}
+.cand-profile-meta {
+  font-size: 12px;
+  color: var(--gray-500);
+  line-height: 1.45;
+  margin-top: 4px;
+}
+.cand-profile-wa {
+  color: var(--info-fg);
+  font-weight: 600;
+  text-decoration: none;
+}
+.cand-profile-wa:hover {
+  text-decoration: underline;
+}
+.cand-profile-bio {
+  margin: 12px 0 0;
+  max-width: 52rem;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--gray-600);
+}
+.cand-score-block {
+  text-align: center;
+  flex-shrink: 0;
+  padding: 4px 8px 0;
+  min-width: 108px;
+}
+.cand-score-label {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--gray-500);
+  margin-top: 8px;
+  letter-spacing: 0.02em;
+}
+.cand-score-hint {
+  font-size: 10px;
+  color: var(--gray-400);
+  margin-top: 2px;
+  max-width: 120px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.35;
+}
+.cand-score-compat {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--gray-100);
+  font-size: 10px;
+  color: var(--gray-500);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+}
+.cand-score-compat strong {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--gray-800);
+  letter-spacing: -0.03em;
+}
+.cand-score-combined {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--gray-100);
+  font-size: 10px;
+  color: var(--gray-500);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+}
+.cand-score-combined strong {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--berry-dark);
+  letter-spacing: -0.03em;
+}
+.cand-profile-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--gray-100);
+}
+.cand-profile-actions {
+  max-width: 240px;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.cand-profile-cvlink {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--info-fg);
+  text-decoration: none;
+}
+.cand-profile-cvlink:hover {
+  text-decoration: underline;
+}
+.cand-profile-cvlink--disabled {
+  color: var(--gray-400);
+  font-weight: 500;
+  cursor: default;
+}
+.cand-split-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  align-items: start;
+}
+.cand-right-panel {
+  position: sticky;
+  top: 76px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+@media (max-width: 1080px) {
+  .cand-split-layout {
+    grid-template-columns: 1fr;
+  }
+  .cand-right-panel {
+    position: static;
+  }
+}
+
+/* Etapa pills */
+.ep {
+  display: inline-flex; align-items: center;
+  font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: var(--radius-pill);
+}
+.ep-inscrito   { background: var(--gray-100);      color: var(--gray-600); }
+.ep-triagem    { background: var(--warn-bg);        color: var(--warn-fg); }
+.ep-entrevista { background: var(--berry-light);    color: var(--berry-dark); }
+.ep-teste      { background: var(--info-bg);        color: var(--info-fg); }
+.ep-contratado { background: var(--success-bg);     color: var(--success-fg); }
+.ep-reprovado  { background: var(--danger-bg);      color: var(--danger-fg); }
+.ep-desistiu   { background: var(--gray-100);       color: var(--gray-500); }
+
+/* Tag row */
+.tag-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+
+/* ============================================================
+   13. STAGE BOXES (candidatos)
+   ============================================================ */
+.stage-boxes { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+.stage-box {
+  background: white; border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg); padding: 14px 18px;
+  flex: 1; min-width: 90px; cursor: pointer; transition: all 0.15s; text-align: center;
+}
+.stage-box:hover  { border-color: var(--olive); }
+.stage-box.active { border-color: var(--olive); background: var(--olive-light); }
+.stage-box-n { font-size: 26px; font-weight: 800; letter-spacing: -1px; line-height: 1; }
+.stage-box-l { font-size: 11px; font-weight: 600; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px; }
+
+/* ============================================================
+   14. ACTIONS DROPDOWN
+   ============================================================ */
+.action-wrap { position: relative; display: inline-block; }
+.action-trigger {
+  font-family: var(--font); font-size: 11px; font-weight: 600;
+  padding: 4px 10px; border-radius: var(--radius-pill);
+  cursor: pointer; border: 1px solid var(--gray-200);
+  background: white; color: var(--gray-600); white-space: nowrap;
+}
+.action-trigger:hover { border-color: var(--gray-400); }
+.action-menu {
+  position: absolute; right: 0; top: 110%;
+  background: white; border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md); box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  min-width: 160px; z-index: 60; display: none; overflow: hidden;
+}
+.action-menu.open { display: block; }
+.action-item {
+  padding: 9px 14px; font-size: 12.5px; font-weight: 500;
+  cursor: pointer; color: var(--gray-700); white-space: nowrap;
+}
+.action-item:hover { background: var(--gray-50); }
+.action-item.advance { color: var(--olive-dark); }
+.action-item.reject  { color: var(--danger-700); }
+.action-item.quit    { color: var(--gray-500); }
+
+/* ============================================================
+   15. FILTER OVERLAY SIDEBAR
+   ============================================================ */
+.filter-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.28);
+  z-index: 400; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.filter-overlay.open { opacity: 1; pointer-events: all; }
+.filter-panel {
+  position: fixed; top: 0; right: 0; height: 100vh; width: 300px;
+  background: white; z-index: 401;
+  transform: translateX(100%); transition: transform 0.25s ease;
+  display: flex; flex-direction: column;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.1);
+}
+.filter-panel.open { transform: translateX(0); }
+.fp-header {
+  padding: 20px 22px 16px; border-bottom: 1px solid var(--gray-200);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.fp-title { font-size: 15px; font-weight: 700; }
+.fp-close { background: none; border: none; cursor: pointer; font-size: 22px; color: var(--gray-400); line-height: 1; }
+.fp-close:hover { color: var(--gray-700); }
+.fp-body { flex: 1; overflow-y: auto; padding: 20px 22px; }
+.fp-section { margin-bottom: 20px; }
+.fp-label { font-size: 11px; font-weight: 700; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px; }
+.fp-option { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; color: var(--gray-700); cursor: pointer; }
+.fp-option input { accent-color: var(--olive); width: 15px; height: 15px; }
+.fp-range-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--gray-400); margin-top: 4px; }
+input[type=range] { width: 100%; accent-color: var(--olive); margin-top: 6px; }
+.fp-footer { padding: 16px 22px; border-top: 1px solid var(--gray-200); display: flex; gap: 8px; }
+
+/* Active filter tag */
+.active-filter-tag {
+  display: none; margin-bottom: 12px;
+}
+.active-filter-tag.show { display: flex; align-items: center; gap: 8px; }
+
+/* ============================================================
+   16. VAGA CARDS (início urgency cards)
+   ============================================================ */
+.vaga-card {
+  background: white; border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg); padding: 18px 20px;
+  cursor: pointer; transition: all 0.15s;
+}
+.vaga-card:hover { border-color: var(--olive); }
+.vaga-card-title { font-size: 15px; font-weight: 700; }
+.vaga-card-meta  { font-size: 12px; color: var(--gray-400); margin-top: 3px; }
+.vaga-card-info  { font-size: 12px; color: var(--gray-500); margin-top: 8px; display: flex; flex-wrap: wrap; gap: 0; }
+.vaga-card-sep   { margin: 0 5px; color: var(--gray-300); }
+.vaga-stats { display: flex; gap: 18px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--gray-100); }
+.vaga-stat-n { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+.vaga-stat-l { font-size: 11px; color: var(--gray-400); margin-top: 1px; }
+
+/* ============================================================
+   17. BANCO DE TALENTOS CARDS
+   ============================================================ */
+.banco-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.banco-card {
+  background: white; border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg); padding: 16px 18px;
+  cursor: pointer; transition: all 0.15s;
+}
+.banco-card:hover { border-color: var(--olive); box-shadow: 0 2px 12px rgba(175,171,35,0.08); }
+.banco-card-top { display: flex; align-items: flex-start; gap: 12px; }
+.banco-card-footer { display: flex; justify-content: space-between; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--gray-100); }
+.banco-score {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0;
+  font-size: 14px; font-weight: 800;
+  border: 2.5px solid var(--olive); background: var(--olive-light); color: var(--gray-900);
+}
+.banco-score.mid { border-color: var(--score-mid-border); background: var(--warn-bg); color: var(--warn-fg); }
+.banco-score.low { border-color: var(--score-low-border); background: var(--danger-bg); color: var(--danger-700); }
+
+/* ============================================================
+   18. TIMELINE (candidato detalhe)
+   ============================================================ */
+.tl { display: flex; flex-direction: column; }
+.tl-row { display: flex; gap: 12px; }
+.tl-spine { display: flex; flex-direction: column; align-items: center; }
+.tl-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--olive); margin-top: 3px; flex-shrink: 0; }
+.tl-dot.berry  { background: var(--berry); }
+.tl-dot.gray   { background: var(--gray-300); }
+.tl-line { width: 2px; background: var(--gray-200); flex: 1; margin: 4px 0; }
+.tl-row:last-child .tl-line { display: none; }
+.tl-body { padding-bottom: 14px; }
+.tl-date { font-size: 11px; color: var(--gray-400); }
+.tl-text { font-size: 13px; color: var(--gray-600); margin-top: 2px; }
+
+/* IA callout */
+.ia-callout {
+  background: var(--olive-light); border-left: 3px solid var(--olive);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: 14px 16px; font-size: 13px; color: var(--gray-700); line-height: 1.65;
+  margin-bottom: 14px;
+}
+
+/* Info table (detalhe processo) */
+.info-table { width: 100%; border-collapse: collapse; }
+.info-table td { padding: 9px 0; border-bottom: 1px solid var(--gray-100); font-size: 13px; }
+.info-table tr:last-child td { border-bottom: none; }
+.info-key { color: var(--gray-400); font-weight: 500; padding-right: 16px; white-space: nowrap; }
+.info-val { font-weight: 600; text-align: right; }
+
+/* Tabelas com colunas fixas/equidistantes */
+.eq-table {
+  width: 100%;
+  table-layout: fixed;
+}
+.eq-table th,
+.eq-table td {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  vertical-align: middle;
+}
+
+/* ============================================================
+   19. FORM COMPONENTS (nova vaga)
+   ============================================================ */
+.flabel { font-size: 11px; font-weight: 700; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px; }
+.benefit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.benefit-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px; border: 1.5px solid var(--gray-200);
+  border-radius: var(--radius-md); cursor: pointer; background: white;
+  font-size: 13px; font-weight: 500; color: var(--gray-700);
+  transition: border-color 0.15s;
+}
+.benefit-item:hover { border-color: var(--olive); }
+.benefit-item input[type=checkbox] { accent-color: var(--olive); width: 15px; height: 15px; flex-shrink: 0; }
+.benefit-val {
+  width: 80px; font-family: var(--font); font-size: 12px;
+  padding: 3px 8px; border: 1px solid var(--gray-200);
+  border-radius: 6px; background: var(--gray-50); color: var(--gray-700);
+  outline: none; margin-left: auto;
+}
+.benefit-val:focus { border-color: var(--olive); }
+
+/* ============================================================
+   20. SEARCH ROW
+   ============================================================ */
+.search-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.search-input {
+  flex: 1; min-width: 180px;
+  font-family: var(--font); font-size: 13px;
+  padding: 9px 14px; border: 1.5px solid var(--gray-200);
+  border-radius: var(--radius-pill); background: white; color: var(--gray-900); outline: none;
+  transition: border-color 0.15s;
+}
+.search-input:focus { border-color: var(--olive); }
+select.search-input { cursor: pointer; flex: 0 0 auto; min-width: 0; }
+
+/* ============================================================
+   21. CAREER PAGE
+   ============================================================ */
+.career-wrap { max-width: 820px; margin: 0 auto; width: 100%; padding: 32px 28px 60px; }
+.career-hero {
+  border-radius: var(--radius-xl); padding: 44px 40px; margin-bottom: 24px;
+  background: var(--berry);
+  background-image: radial-gradient(ellipse at 80% 20%, rgba(255,255,255,0.07) 0%, transparent 60%);
+  position: relative; overflow: hidden;
+}
+.career-hero-content { position: relative; z-index: 1; }
+.career-logo-box {
+  width: 56px; height: 56px; border-radius: 14px;
+  background: rgba(255,255,255,0.15);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; font-weight: 800; color: white;
+  margin-bottom: 18px;
+}
+.career-title { font-size: 28px; font-weight: 800; color: white; letter-spacing: -0.8px; margin-bottom: 8px; }
+.career-desc  { font-size: 14px; color: rgba(255,255,255,0.6); line-height: 1.65; max-width: 500px; }
+.career-chips { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+.career-chip  { background: rgba(255,255,255,0.12); border-radius: var(--radius-pill); padding: 5px 14px; font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.85); }
+.career-chip.hi { background: rgba(212,220,107,0.22); color: var(--olive-mid); }
+.career-about {
+  background: white; border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg); padding: 22px; margin-bottom: 24px;
+}
+.career-jobs-list { display: flex; flex-direction: column; gap: 10px; }
+.career-job-card {
+  background: white; border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg); overflow: hidden; transition: all 0.15s;
+}
+.career-job-card:hover { border-color: var(--olive); }
+.career-job-header {
+  padding: 18px 20px; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.career-job-title { font-size: 15px; font-weight: 700; }
+.career-job-meta  { font-size: 12px; color: var(--gray-400); margin-top: 4px; }
+.career-job-body  { display: none; padding: 0 20px 20px; border-top: 1px solid var(--gray-100); }
+.career-job-body.open { display: block; }
+.career-job-desc  { font-size: 13px; color: var(--gray-600); line-height: 1.7; padding-top: 14px; }
+
+/* ============================================================
+   22. UTILITIES
+   ============================================================ */
+.flex   { display: flex; }
+.aic    { align-items: center; }
+.jsb    { justify-content: space-between; }
+.g6  { gap: 6px; }  .g8  { gap: 8px; }
+.g12 { gap: 12px; } .g16 { gap: 16px; }
+.mb8  { margin-bottom: 8px; }  .mb12 { margin-bottom: 12px; }
+.mb16 { margin-bottom: 16px; } .mb20 { margin-bottom: 20px; }
+.mb24 { margin-bottom: 24px; }
+.fw5  { font-weight: 500; } .fw6 { font-weight: 600; } .fw7 { font-weight: 700; } .fw8 { font-weight: 800; }
+.fs11 { font-size: 11px; }  .fs12 { font-size: 12px; } .fs13 { font-size: 13px; }
+.c400 { color: var(--gray-400); } .c500 { color: var(--gray-500); } .c600 { color: var(--gray-600); }
+.muted { color: var(--gray-400); }

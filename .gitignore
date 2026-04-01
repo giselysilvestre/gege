@@ -1,3 +1,4 @@
+.cursor/
 node_modules/
 **/node_modules/
 dist/
@@ -7,3 +8,9 @@ dist/
 *.log
 .DS_Store
 *.tsbuildinfo
+
+# Segredos e artefatos locais (processador CV / Gmail)
+gege-cv-processor/credentials.json
+gege-cv-processor/token.json
+gege-cv-processor/lista*.csv
+docs/_html_extract.txt

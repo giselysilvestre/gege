@@ -1,10 +1,20 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
+import { devError } from "@/lib/devLog";
 
 export type ClienteEmpresa = {
   id: string;
   nome_empresa: string | null;
   email: string | null;
   nome_contato: string | null;
+};
+type ClienteInsert = {
+  nome_empresa: string;
+  nome_contato: string;
+  email: string;
+  telefone: string;
+  cep: string;
+  cidade: string;
+  slug: string;
 };
 
 function ilikeExactPattern(value: string): string {
@@ -18,10 +28,9 @@ function ilikeExactPattern(value: string): string {
 export async function ensureClienteForUser(supabase: SupabaseClient, user: User): Promise<ClienteEmpresa | null> {
   const emailRaw = user.email?.trim();
   if (!emailRaw || !user.id) return null;
-
   const email = emailRaw;
-  const emailKey = email.toLowerCase();
 
+  const emailKey = email.toLowerCase();
   const { data: rows } = await supabase
     .from("clientes")
     .select("id, nome_empresa, email, nome_contato")
@@ -36,8 +45,7 @@ export async function ensureClienteForUser(supabase: SupabaseClient, user: User)
   const slugBase = local.replace(/[^a-z0-9-]+/gi, "-").replace(/^-+|-+$/g, "") || "cliente";
   const telefonePlaceholder = `u-${user.id.replace(/-/g, "")}`;
 
-  const { data: insRows, error } = await (supabase.from("clientes") as any)
-    .insert({
+  const payload: ClienteInsert = {
       nome_empresa: local,
       nome_contato: local,
       email: emailKey,
@@ -45,7 +53,10 @@ export async function ensureClienteForUser(supabase: SupabaseClient, user: User)
       cep: "",
       cidade: "",
       slug: `${slugBase}-${Date.now()}`,
-    })
+    };
+  const { data: insRows, error } = await supabase
+    .from("clientes")
+    .insert(payload)
     .select("id, nome_empresa, email, nome_contato")
     .limit(1);
 
@@ -61,6 +72,6 @@ export async function ensureClienteForUser(supabase: SupabaseClient, user: User)
     return (retry?.[0] as ClienteEmpresa) ?? null;
   }
 
-  console.error("[ensureClienteForUser]", error?.message);
+  devError("[ensureClienteForUser]", error?.message);
   return null;
 }

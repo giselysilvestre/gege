@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ensureClienteForUser } from "@/lib/ensureClienteBrowser";
 import { VagasLista } from "./VagasLista";
+import { devError } from "@/lib/devLog";
 import type { JobCardVaga } from "@/components/JobCard";
 
 export default function VagasPage() {
@@ -15,7 +16,7 @@ export default function VagasPage() {
     void (async () => {
       const supabase = getSupabaseBrowserClient();
       const { data: sessWrap, error: se } = await supabase.auth.getSession();
-      if (se) console.error("[vagas] getSession:", se.message);
+      if (se) devError("[vagas] getSession:", se.message);
       const session = sessWrap.session;
       if (!session?.user) {
         setErrorMessage("Não foi possível identificar o cliente. Faça login de novo.");
@@ -32,20 +33,22 @@ export default function VagasPage() {
 
       const { data, error } = await supabase
         .from("vagas")
-        .select("*, candidaturas ( id, status, candidatos ( id, score ) )")
+        .select(
+          "id,cargo,titulo_publicacao,salario,escala,horario,endereco,status_vaga,criado_em,fechada_em, cliente_unidades ( nome ), candidaturas ( id, status, score_compatibilidade, candidatos ( id ) )"
+        )
         .eq("cliente_id", cliente.id)
         .order("criado_em", { ascending: false });
 
       if (error) setErrorMessage(error.message);
-      else setVagas((data as JobCardVaga[]) ?? []);
+      else setVagas((data as unknown as JobCardVaga[]) ?? []);
       setLoading(false);
     })();
   }, []);
 
   if (loading) {
     return (
-      <div style={{ background: "#F9FAFB", minHeight: "100vh", padding: "24px 16px" }}>
-        <p style={{ fontSize: "14px", color: "#667085" }}>Carregando vagas…</p>
+      <div className="fs14 c600" style={{ padding: 8 }}>
+        Carregando vagas…
       </div>
     );
   }
