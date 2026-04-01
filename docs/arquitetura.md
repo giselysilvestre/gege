@@ -26,3 +26,7 @@
 ## Variáveis de ambiente críticas
 
 Ver `.env.example` na raiz. **Nunca** commitar chaves reais. Service role só em servidor (sem `NEXT_PUBLIC_`).
+
+## Problemas comuns
+
+- **Login (ou app) sem CSS, fonte Times, fundo branco:** em `globals.css`, o `@import` do `gege-mockup.css` deve ficar **antes** das diretivas `@tailwind`. Depois, na pasta `frontend/`, rode `npm run clean` e `npm run dev` de novo. Não indica erro na documentação do produto — é cache/build do Next ou ordem do PostCSS.

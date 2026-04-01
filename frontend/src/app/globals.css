@@ -1,8 +1,9 @@
+/* @import deve vir antes de @tailwind (PostCSS/CSS); senão o bundle pode sair vazio ou sem tokens do mockup. */
+@import "../styles/gege-mockup.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import "../styles/gege-mockup.css";
 
 :root {
   --n25:  #fcfcfd;
@@ -61,8 +62,8 @@ html {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Alinhado ao mockup HTML (--gray-100) */
-body { background-color: var(--gray-100); color: var(--n900); }
+/* Alinhado ao mockup HTML (--gray-100 vem do gege-mockup.css importado acima) */
+body { background-color: var(--gray-100, #f4f5f7); color: var(--n900); }
 a { color: inherit; text-decoration: none; }
 
 /* --------------------------------------------------------------------------
