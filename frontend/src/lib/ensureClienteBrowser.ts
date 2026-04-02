@@ -7,6 +7,8 @@ export type ClienteEmpresa = {
   email: string | null;
   nome_contato: string | null;
 };
+type ClienteMembroRow = { cliente_id: string };
+
 type ClienteInsert = {
   nome_empresa: string;
   nome_contato: string;
@@ -31,6 +33,31 @@ export async function ensureClienteForUser(supabase: SupabaseClient, user: User)
   const email = emailRaw;
 
   const emailKey = email.toLowerCase();
+
+  const { data: mems, error: memErr } = await supabase
+    .from("cliente_membros")
+    .select("cliente_id")
+    .eq("user_id", user.id)
+    .order("criado_em", { ascending: true })
+    .limit(1);
+
+  if (memErr) {
+    devError("[ensureClienteForUser] cliente_membros:", memErr.message);
+  } else {
+    const memRows = (mems ?? null) as ClienteMembroRow[] | null;
+    const cid = memRows?.[0]?.cliente_id;
+    if (cid) {
+      const { data: byMembro, error: clErr } = await supabase
+        .from("clientes")
+        .select("id, nome_empresa, email, nome_contato")
+        .eq("id", cid)
+        .limit(1);
+      if (clErr) devError("[ensureClienteForUser] clientes by membros:", clErr.message);
+      const rowM = byMembro?.[0] as ClienteEmpresa | undefined;
+      if (rowM) return rowM;
+    }
+  }
+
   const { data: rows } = await supabase
     .from("clientes")
     .select("id, nome_empresa, email, nome_contato")

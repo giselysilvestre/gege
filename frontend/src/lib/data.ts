@@ -11,6 +11,8 @@ type ClienteRow = {
   email: string | null;
   nome_contato: string | null;
 };
+type ClienteMembroRow = { cliente_id: string };
+
 type ClienteInsert = {
   nome_empresa: string;
   nome_contato: string;
@@ -78,6 +80,69 @@ async function selectClienteByEmail(client: SupabaseClient, emailForIlike: strin
   return (rows?.[0] as ClienteRow | undefined) ?? null;
 }
 
+
+/** Primeiro vínculo em cliente_membros (mesmo user em vários clientes: mais antigo). */
+async function selectClienteByMembroUserId(client: SupabaseClient, userId: string) {
+  const { data: mems, error: memErr } = await client
+    .from("cliente_membros")
+    .select("cliente_id")
+    .eq("user_id", userId)
+    .order("criado_em", { ascending: true })
+    .limit(1);
+
+  if (memErr) {
+    devError("[getCurrentCliente] cliente_membros:", memErr.message, memErr.code);
+    return null;
+  }
+  const memRows = (mems ?? null) as ClienteMembroRow[] | null;
+  const cid = memRows?.[0]?.cliente_id;
+  if (!cid) return null;
+
+  const { data: rows, error } = await client
+    .from("clientes")
+    .select("id, nome_empresa, email, nome_contato")
+    .eq("id", cid)
+    .limit(1);
+
+  if (error) {
+    devError("[getCurrentCliente] select clientes by membros:", error.message, error.code);
+    return null;
+  }
+  return (rows?.[0] as ClienteRow | undefined) ?? null;
+}
+
+async function selectClienteByMembroUserIdAdmin(
+  admin: NonNullable<ReturnType<typeof tryAdmin>>,
+  userId: string,
+) {
+  const { data: mems, error: memErr } = await admin
+    .from("cliente_membros")
+    .select("cliente_id")
+    .eq("user_id", userId)
+    .order("criado_em", { ascending: true })
+    .limit(1);
+
+  if (memErr) {
+    devError("[getCurrentCliente] admin cliente_membros:", memErr.message);
+    return null;
+  }
+  const memRows = (mems ?? null) as ClienteMembroRow[] | null;
+  const cid = memRows?.[0]?.cliente_id;
+  if (!cid) return null;
+
+  const { data: rows, error } = await admin
+    .from("clientes")
+    .select("id, nome_empresa, email, nome_contato")
+    .eq("id", cid)
+    .limit(1);
+
+  if (error) {
+    devError("[getCurrentCliente] admin select clientes by membros:", error.message);
+    return null;
+  }
+  return (rows?.[0] as ClienteRow | undefined) ?? null;
+}
+
 async function selectClienteByEmailAdmin(admin: NonNullable<ReturnType<typeof tryAdmin>>, emailForIlike: string) {
   const { data: rows, error } = await admin
     .from("clientes")
@@ -101,6 +166,9 @@ async function upsertClienteViaAdmin(emailRaw: string, userId: string) {
     devError("[getCurrentCliente] SUPABASE_SERVICE_ROLE_KEY ausente ou inválida — fallback admin indisponível.");
     return null;
   }
+
+  const viaMembro = await selectClienteByMembroUserIdAdmin(admin, userId);
+  if (viaMembro) return viaMembro;
 
   const emailKey = emailRaw.trim().toLowerCase();
   const found = await selectClienteByEmailAdmin(admin, emailRaw.trim());
@@ -162,11 +230,16 @@ export async function getCurrentCliente(supabaseClient?: SupabaseClient, opts?: 
   const email = emailRaw.trim();
   const emailKey = email.toLowerCase();
 
+  const viaMembro = await selectClienteByMembroUserId(supabase, user.id);
+  if (viaMembro) return viaMembro;
+
   const cliente = await selectClienteByEmail(supabase, email);
   if (cliente) return cliente;
 
   const admin = tryAdmin();
   if (admin) {
+    const viaMembroAdmin = await selectClienteByMembroUserIdAdmin(admin, user.id);
+    if (viaMembroAdmin) return viaMembroAdmin;
     const viaAdmin = await selectClienteByEmailAdmin(admin, email);
     if (viaAdmin) return viaAdmin;
   }
