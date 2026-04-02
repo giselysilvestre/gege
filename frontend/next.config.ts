@@ -2,7 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { NextConfig } from "next";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const monorepoRoot = fileURLToPath(new URL("..", import.meta.url));
 
 /** Porta do Express (igual a PORT no backend/.env, padrão 4000). */
 const backendPort = process.env.GEGE_BACKEND_PORT ?? "4000";
@@ -26,7 +26,7 @@ const nextConfig: NextConfig = {
   /** Evita chunks quebrados (ENOENT em vendor-chunks/@supabase) no dev no Windows. */
   transpilePackages: ["@supabase/supabase-js", "@supabase/ssr"],
   /** Monorepo: evita aviso de múltiplos lockfiles na raiz `gege/`. */
-  outputFileTracingRoot: path.join(__dirname, ".."),
+  outputFileTracingRoot: monorepoRoot,
   /**
    * Em desenvolvimento, o browser chama /gege-api/... no mesmo host do Next;
    * o Next encaminha para o Express. Assim não há CORS nem bloqueio entre portas.
