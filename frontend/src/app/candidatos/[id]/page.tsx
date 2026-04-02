@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSupabaseBrowser } from "@/lib/supabase/useSupabaseBrowser";
@@ -357,6 +357,9 @@ function CandidatoPerfilInner() {
 
   const backHref = vagaId ? `/vagas/${encodeURIComponent(vagaId)}` : "/candidatos";
 
+  const [acoesMenuOpen, setAcoesMenuOpen] = useState(false);
+  const acoesMenuRef = useRef<HTMLDivElement>(null);
+
   const [c, setC] = useState<Candidato | null>(null);
   const [candidatura, setCandidatura] = useState<CandidaturaRow | null>(null);
   const [analise, setAnalise] = useState<CandidatoAnalise | null>(null);
@@ -430,6 +433,16 @@ function CandidatoPerfilInner() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!acoesMenuOpen) return;
+    const onDocPointerDown = (e: PointerEvent) => {
+      const el = acoesMenuRef.current;
+      if (el && !el.contains(e.target as Node)) setAcoesMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onDocPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onDocPointerDown, true);
+  }, [acoesMenuOpen]);
+
   const displayIaScore = useMemo(() => cvIaScoreForDisplay(analise), [analise]);
   const displayCombinedAnaliseScore = useMemo(() => combinedAnaliseScoreForDisplay(analise), [analise]);
 
@@ -464,18 +477,6 @@ function CandidatoPerfilInner() {
 
   const proxDb = candidatura ? nextDbStatus(candidatura.status) : null;
   const ep = candidatura ? etapaPill(candidatura.status) : null;
-
-  const locLine = useMemo(() => {
-    if (!c) return "";
-    const parts: string[] = [];
-    const age = idadeDe(c.data_nascimento);
-    if (age != null) parts.push(`${age} anos`);
-    const loc = [c.cidade?.trim(), c.bairro?.trim() ? c.bairro.trim() : null].filter(Boolean).join(", ");
-    if (loc) parts.push(loc);
-    if (distStr) parts.push(distStr);
-    if (c.email?.trim()) parts.push(c.email.trim());
-    return parts.join(" · ");
-  }, [c, distStr]);
 
   const historicoProcesso = useMemo(() => {
     if (!candidatura) return [];
@@ -564,31 +565,79 @@ function CandidatoPerfilInner() {
           ← Voltar
         </button>
         {c ? (
-          <select
-            className="search-input cand-detail-acoes-mobile"
-            aria-label="Ações"
-            defaultValue=""
-            disabled={busy}
-            onChange={(e) => {
-              const val = e.target.value;
-              const el = e.currentTarget;
-              el.value = "";
-              if (!val) return;
-              void onActionChange(val);
-            }}
-          >
-            <option value="">Ações</option>
-            <option value="proxima" disabled={!candidatura || !proxDb}>
-              {proximaLabel}
-            </option>
-            <option value="reprovar" disabled={!candidatura}>
-              Reprovar
-            </option>
-            {wa ? <option value="whatsapp">WhatsApp</option> : null}
-            <option value="curriculo" disabled={!c.curriculo_url?.trim()}>
-              Ver currículo
-            </option>
-          </select>
+          <div ref={acoesMenuRef} className={`cand-detail-acoes-wrap${acoesMenuOpen ? " is-open" : ""}`}>
+            <button
+              type="button"
+              className="search-input cand-detail-acoes-mobile cand-detail-acoes-trigger"
+              aria-label="Ações"
+              aria-expanded={acoesMenuOpen}
+              aria-haspopup="menu"
+              disabled={busy}
+              onClick={() => setAcoesMenuOpen((v) => !v)}
+            >
+              Ações
+              <span className="cand-detail-acoes-chevron" aria-hidden>
+                ▾
+              </span>
+            </button>
+            {acoesMenuOpen ? (
+              <div className="cand-detail-acoes-panel" role="menu">
+                <div className="cand-detail-acoes-panel-title">Ações</div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="cand-detail-acoes-item"
+                  disabled={busy || !candidatura || !proxDb}
+                  onClick={() => {
+                    setAcoesMenuOpen(false);
+                    void onActionChange("proxima");
+                  }}
+                >
+                  {proximaLabel}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="cand-detail-acoes-item"
+                  disabled={busy || !candidatura}
+                  onClick={() => {
+                    setAcoesMenuOpen(false);
+                    void onActionChange("reprovar");
+                  }}
+                >
+                  Reprovar
+                </button>
+                {wa ? (
+                  <a
+                    role="menuitem"
+                    className="cand-detail-acoes-item cand-detail-acoes-link"
+                    href={`https://wa.me/${wa}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setAcoesMenuOpen(false)}
+                  >
+                    WhatsApp
+                  </a>
+                ) : null}
+                {c.curriculo_url?.trim() ? (
+                  <a
+                    role="menuitem"
+                    className="cand-detail-acoes-item cand-detail-acoes-link"
+                    href={c.curriculo_url.trim()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setAcoesMenuOpen(false)}
+                  >
+                    Ver currículo
+                  </a>
+                ) : (
+                  <span className="cand-detail-acoes-item cand-detail-acoes-item--disabled" aria-disabled>
+                    Ver currículo
+                  </span>
+                )}
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </div>
 
@@ -610,26 +659,43 @@ function CandidatoPerfilInner() {
                           <h1 className="cand-profile-name">{c.nome}</h1>
                         </div>
                         <div className="cand-profile-meta-section">
-                          <div className="cand-profile-meta">{locLine || "—"}</div>
-                          <div className="cand-profile-meta cand-profile-detail-lines" style={{ marginTop: 6, display: "grid", gap: 4 }}>
+                          <div className="cand-profile-detail-lines">
                             {[c.bairro?.trim(), c.cidade?.trim(), distStr].filter(Boolean).length > 0 ? (
-                              <span>{[c.bairro?.trim(), c.cidade?.trim(), distStr].filter(Boolean).join(" · ")}</span>
+                              <div className="cand-profile-detail-row">
+                                <span className="cand-profile-detail-label">Endereço</span>
+                                <span className="cand-profile-detail-value">
+                                  {[c.bairro?.trim(), c.cidade?.trim()].filter(Boolean).join(", ")}
+                                  {distStr ? ` · ${distStr}` : ""}
+                                </span>
+                              </div>
                             ) : null}
-                            {c.email?.trim() ? <span>Email: {c.email.trim()}</span> : null}
+                            {c.email?.trim() ? (
+                              <div className="cand-profile-detail-row">
+                                <span className="cand-profile-detail-label">Email</span>
+                                <span className="cand-profile-detail-value">{c.email.trim()}</span>
+                              </div>
+                            ) : null}
                             {c.telefone?.trim() ? (
-                              <span>
-                                Telefone:{" "}
-                                {wa ? (
-                                  <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" className="cand-profile-wa">
-                                    <span style={{ marginRight: 4 }}>🟢</span>
-                                    {c.telefone.trim()}
-                                  </a>
-                                ) : (
-                                  c.telefone.trim()
-                                )}
-                              </span>
+                              <div className="cand-profile-detail-row">
+                                <span className="cand-profile-detail-label">Telefone</span>
+                                <span className="cand-profile-detail-value">
+                                  {wa ? (
+                                    <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" className="cand-profile-wa">
+                                      <span className="cand-profile-wa-dot" aria-hidden />
+                                      {c.telefone.trim()}
+                                    </a>
+                                  ) : (
+                                    c.telefone.trim()
+                                  )}
+                                </span>
+                              </div>
                             ) : null}
-                            {idade != null ? <span>Idade: {idade}</span> : null}
+                            {idade != null ? (
+                              <div className="cand-profile-detail-row">
+                                <span className="cand-profile-detail-label">Idade</span>
+                                <span className="cand-profile-detail-value">{idade} anos</span>
+                              </div>
+                            ) : null}
                           </div>
                           <div className="flex g6 cand-profile-tag-row" style={{ marginTop: 10, flexWrap: "wrap" }}>
                             {ep ? <span className={ep.className}>{ep.label}</span> : null}
@@ -643,7 +709,9 @@ function CandidatoPerfilInner() {
                       </div>
                       <div className="cand-profile-head-aside">
                         <div className="cand-score-block">
-                          <div className={scoreCircleClass(displayIaScore)}>{displayIaScore != null ? displayIaScore : "—"}</div>
+                          <div className={`${scoreCircleClass(displayIaScore)} cand-score-mobile-subtle`}>
+                            {displayIaScore != null ? displayIaScore : "—"}
+                          </div>
                           <div className="cand-score-label">Score IA</div>
                           <div className="cand-score-hint">Currículo / análise automática</div>
                           {displayCombinedAnaliseScore != null ? (

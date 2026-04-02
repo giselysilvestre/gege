@@ -130,7 +130,7 @@ export function CandidatosFiltersBar(props: CandidatosFiltersBarProps) {
               position: "fixed",
               inset: 0,
               background: "var(--overlay-dark)",
-              zIndex: 60,
+              zIndex: 85,
             }}
             onClick={() => setOpen(false)}
             onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
@@ -144,7 +144,7 @@ export function CandidatosFiltersBar(props: CandidatosFiltersBarProps) {
               width: "min(100vw - 48px, 340px)",
               maxWidth: "100vw",
               background: "var(--white)",
-              zIndex: 70,
+              zIndex: 90,
               boxShadow: "var(--panel-shadow)",
               display: "flex",
               flexDirection: "column",
@@ -180,7 +180,34 @@ export function CandidatosFiltersBar(props: CandidatosFiltersBarProps) {
               </button>
             </div>
 
-            <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
+            <div
+              style={{
+                padding: "12px 16px 14px",
+                borderBottom: "1px solid var(--n200)",
+                background: "var(--white)",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                style={{
+                  width: "100%",
+                  height: "46px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background: "var(--olive)",
+                  color: "var(--berry-dark)",
+                  fontSize: "14px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  boxShadow: "0 2px 8px rgba(175, 171, 35, 0.35)",
+                }}
+              >
+                Aplicar filtros
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: "auto", padding: "16px", paddingBottom: "28px" }}>
               <p style={sectionTitle}>Vaga</p>
               <label style={labelRow}>
                 <input type="checkbox" checked={selectedVagaIds.length === 0} onChange={() => selectAllVagas()} />
@@ -259,26 +286,6 @@ export function CandidatosFiltersBar(props: CandidatosFiltersBarProps) {
                   <span>{kmMax}km</span>
                 </div>
               </div>
-            </div>
-
-            <div style={{ padding: "16px", borderTop: "1px solid var(--n200)" }}>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                style={{
-                  width: "100%",
-                  height: "48px",
-                  borderRadius: "8px",
-                  border: "none",
-                  background: "var(--n900)",
-                  color: "var(--white)",
-                  fontSize: "14px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                Aplicar
-              </button>
             </div>
           </aside>
         </>

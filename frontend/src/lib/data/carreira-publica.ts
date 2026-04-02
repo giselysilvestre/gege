@@ -40,12 +40,12 @@ export async function getCarreiraPublicaBySlug(rawSlug: string): Promise<Carreir
   if (!slug) return null;
 
   const sb = getSupabaseAdmin();
-  const { data: clienteData } = await sb
+  const { data: clienteDataBySlug } = await sb
     .from("clientes")
     .select("id,slug_url,nome_empresa,descricao,sobre,whatsapp,cidade")
     .eq("slug_url", slug)
     .maybeSingle();
-  const clienteRow = clienteData as
+  let clienteRow = clienteDataBySlug as
     | {
         id: string;
         slug_url: string | null;
@@ -56,6 +56,42 @@ export async function getCarreiraPublicaBySlug(rawSlug: string): Promise<Carreir
         cidade: string | null;
       }
     | null;
+
+  // Fallback: muitos clientes antigos guardam URL pública em cliente_configuracoes.carreira_url.
+  if (!clienteRow?.id) {
+    const { data: cfgByUrl } = await sb
+      .from("cliente_configuracoes")
+      .select("cliente_id,carreira_url")
+      .ilike("carreira_url", `%/${slug}`)
+      .maybeSingle();
+
+    const cfgUrlRow = cfgByUrl as
+      | {
+          cliente_id: string | null;
+          carreira_url: string | null;
+        }
+      | null;
+
+    if (cfgUrlRow?.cliente_id) {
+      const { data: clienteDataById } = await sb
+        .from("clientes")
+        .select("id,slug_url,nome_empresa,descricao,sobre,whatsapp,cidade")
+        .eq("id", cfgUrlRow.cliente_id)
+        .maybeSingle();
+
+      clienteRow = clienteDataById as
+        | {
+            id: string;
+            slug_url: string | null;
+            nome_empresa: string | null;
+            descricao: string | null;
+            sobre: string | null;
+            whatsapp: string | null;
+            cidade: string | null;
+          }
+        | null;
+    }
+  }
 
   if (!clienteRow?.id) return null;
 

@@ -301,7 +301,12 @@ function CandidatosContent() {
   async function onAction(candidaturaId: string, action: "proxima" | "reprovar" | "desistiu" | "whatsapp", tel: string) {
     if (action === "whatsapp" && tel) {
       const wa = tel.replace(/\D/g, "");
-      if (wa) window.open(`https://wa.me/${wa}`, "_blank", "noopener,noreferrer");
+      if (wa) {
+        const url = `https://wa.me/${wa.startsWith("55") ? wa : `55${wa}`}`;
+        // Safari no iPhone costuma bloquear window.open fora de um toque direto em <a>.
+        const w = window.open(url, "_blank", "noopener,noreferrer");
+        if (w == null) window.location.assign(url);
+      }
       return;
     }
     if (!supabase) return;

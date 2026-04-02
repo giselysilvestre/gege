@@ -274,6 +274,119 @@ tbody tr:hover { background: var(--gray-50); }
   flex: 0 1 auto;
   min-width: 0;
 }
+
+.cand-detail-acoes-wrap {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+  z-index: 1;
+}
+
+.cand-detail-acoes-wrap.is-open {
+  z-index: 96;
+}
+
+.cand-detail-acoes-trigger {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.cand-detail-acoes-chevron {
+  font-size: 11px;
+  opacity: 0.65;
+  flex-shrink: 0;
+}
+
+.cand-detail-acoes-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: min(100vw - 48px, 220px);
+  max-width: min(92vw, 260px);
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(16, 24, 40, 0.14);
+  padding: 8px 0;
+  z-index: 97;
+}
+
+.cand-detail-acoes-panel-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gray-400);
+  padding: 6px 14px 10px;
+  border-bottom: 1px solid var(--gray-100);
+  margin-bottom: 4px;
+}
+
+.cand-detail-acoes-item {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--info-fg);
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.cand-detail-acoes-item:hover:not(:disabled) {
+  background: var(--gray-50);
+}
+
+.cand-detail-acoes-item:disabled,
+.cand-detail-acoes-item--disabled {
+  color: var(--gray-400);
+  font-weight: 500;
+  cursor: default;
+  pointer-events: none;
+}
+
+a.cand-detail-acoes-link {
+  text-decoration: none;
+}
+
+.cand-profile-detail-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+  width: 100%;
+}
+
+.cand-profile-detail-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 92px) minmax(0, 1fr);
+  gap: 10px 14px;
+  align-items: start;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.cand-profile-detail-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gray-400);
+  padding-top: 2px;
+}
+
+.cand-profile-detail-value {
+  color: var(--gray-700);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
 .cand-profile-meta-section > .cand-profile-meta:first-of-type {
   margin-top: 0;
 }
@@ -284,9 +397,20 @@ tbody tr:hover { background: var(--gray-50); }
   margin-top: 4px;
 }
 .cand-profile-wa {
+  display: inline-flex;
+  align-items: center;
   color: var(--info-fg);
   font-weight: 600;
   text-decoration: none;
+}
+.cand-profile-wa-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #25d366;
+  margin-right: 8px;
+  flex-shrink: 0;
 }
 .cand-profile-wa:hover {
   text-decoration: underline;
@@ -436,7 +560,7 @@ tbody tr:hover { background: var(--gray-50); }
     min-width: 0;
     width: auto;
     max-width: 100%;
-    text-align: center;
+    text-align: left;
   }
   .cand-profile-mobile-top {
     display: flex;
@@ -456,7 +580,7 @@ tbody tr:hover { background: var(--gray-50); }
     width: 100%;
     max-width: 100%;
     overflow-wrap: anywhere;
-    text-align: center;
+    text-align: left;
   }
   .cand-profile-meta-section {
     grid-column: unset;
@@ -464,21 +588,35 @@ tbody tr:hover { background: var(--gray-50); }
     width: 100%;
     max-width: 100%;
   }
-  /* Metadados e tags centralizados na coluna (mobile) */
-  .cand-profile-detail-lines {
-    justify-items: center;
-    text-align: center;
+  .cand-profile-detail-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
   }
   .cand-profile-tag-row {
-    justify-content: center;
+    justify-content: flex-start;
   }
   .cand-profile-head-aside {
-    align-items: center;
+    align-items: flex-start;
   }
   .cand-profile-head-aside .cand-score-block {
-    min-width: 92px;
-    padding-left: 2px;
-    padding-right: 2px;
+    min-width: auto;
+    padding-left: 0;
+    padding-right: 0;
+    text-align: right;
+  }
+  /* Score IA mais discreto no mobile (estilo “badge” ao lado do bloco) */
+  .cand-score-mobile-subtle.score.score-xl {
+    width: 44px;
+    height: 44px;
+    font-size: 15px;
+    border-width: 2px;
+  }
+  .cand-profile-head-aside .cand-score-hint {
+    display: none;
+  }
+  .cand-profile-head-aside .cand-score-label {
+    margin-top: 4px;
+    font-size: 10px;
   }
 }
 
