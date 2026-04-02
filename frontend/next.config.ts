@@ -19,8 +19,6 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  /** Evita chunks quebrados (ENOENT em vendor-chunks/@supabase) no dev no Windows. */
-  transpilePackages: ["@supabase/supabase-js", "@supabase/ssr"],
   /**
    * Em desenvolvimento, o browser chama /gege-api/... no mesmo host do Next;
    * o Next encaminha para o Express. Assim não há CORS nem bloqueio entre portas.
