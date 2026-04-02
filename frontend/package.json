@@ -13,7 +13,8 @@
         "dev:reset:win": "node scripts/kill-port-3000.cjs && npm run clean && next dev -p 3000",
         "build": "next build",
         "start": "next start",
-        "lint": "next lint"
+        "lint": "next lint",
+        "backfill:auth-names": "node scripts/backfill-auth-display-names.mjs"
     },
     "dependencies": {
         "@supabase/ssr": "^0.9.0",

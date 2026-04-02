@@ -4,8 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ensureClienteForUser, type ClienteEmpresa } from "@/lib/ensureClienteBrowser";
+import { displayNameFromUser, initialsFromDisplayName } from "@/lib/displayNameFromUser";
+import { getAuthUserWithFreshMetadata } from "@/lib/getAuthUserWithFreshMetadata";
 import {
   funnelRowsFromStatuses,
   isNoFunil,
@@ -68,13 +71,6 @@ function idadeDe(d: string | null | undefined): number | null {
   const m = t.getMonth() - b.getMonth();
   if (m < 0 || (m === 0 && t.getDate() < b.getDate())) a--;
   return a >= 0 ? a : null;
-}
-
-function initials(nome: string) {
-  const p = nome.trim().split(/\s+/).filter(Boolean);
-  if (p.length === 0) return "?";
-  if (p.length === 1) return p[0].slice(0, 2).toUpperCase();
-  return (p[0][0] + p[p.length - 1][0]).toUpperCase();
 }
 
 function cidadeUf(cidade: string | null | undefined): string | null {
@@ -169,6 +165,7 @@ function bestByCandidate(rows: TopRow[]): TopRow[] {
 export default function DashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [authUser, setAuthUser] = useState<User | null>(null);
   const [cliente, setCliente] = useState<ClienteEmpresa | null>(null);
   const [vagas, setVagas] = useState<DashboardVaga[]>([]);
   const [metrics, setMetrics] = useState({
@@ -189,12 +186,13 @@ export default function DashboardPage() {
   useEffect(() => {
     void (async () => {
       const sb = getSupabaseBrowserClient();
-      const { data: s } = await sb.auth.getSession();
-      if (!s.session?.user) {
+      const user = await getAuthUserWithFreshMetadata(sb);
+      if (!user) {
         setLoading(false);
         return;
       }
-      const cli = await ensureClienteForUser(sb, s.session.user);
+      setAuthUser(user);
+      const cli = await ensureClienteForUser(sb, user);
       setCliente(cli);
       if (!cli?.id) {
         setLoading(false);
@@ -403,10 +401,67 @@ export default function DashboardPage() {
     return <div style={{ padding: 32, color: "var(--gray-500)", fontSize: 14 }}>Carregando…</div>;
   }
 
+  const personName = displayNameFromUser(authUser);
+  const personInitials = initialsFromDisplayName(personName);
+  const companySubtitle = !cliente?.id ? "—" : (cliente.nome_empresa?.trim() || "Cliente");
+
+  const mobileDashHeader = (
+    <div className="dash-mobile-header">
+      <Link href="/dashboard" className="dash-mobile-logo-link" aria-label="Ir para Início">
+        <Image src="/branding/logo-gege-purple-transparent.png" alt="" width={118} height={34} className="dash-mobile-logo" />
+      </Link>
+      <div className="dash-mobile-profile-wrap" ref={mobileProfileRef}>
+        <button type="button" className="dash-mobile-brand" onClick={() => setMobileProfileOpen((v) => !v)}>
+          <span className="dash-mobile-brand-avatar">{personInitials}</span>
+          <span className="dash-mobile-brand-copy">
+            <span className="dash-mobile-brand-person">{personName}</span>
+            <span className="dash-mobile-brand-company">{companySubtitle}</span>
+          </span>
+        </button>
+        {mobileProfileOpen ? (
+          <div className="dash-mobile-profile-menu">
+            <button
+              type="button"
+              className="dash-mobile-profile-item"
+              onClick={() => {
+                setMobileProfileOpen(false);
+                router.push("/configuracoes");
+              }}
+            >
+              Configurações
+            </button>
+            <button type="button" className="dash-mobile-profile-item dash-mobile-profile-item-danger" onClick={onMobileLogout}>
+              Logout
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+
   if (!cliente?.id) {
     return (
-      <div style={{ padding: 32, color: "var(--gray-500)", fontSize: 14 }}>
-        Associe um cliente à sua conta para ver o painel.
+      <div style={{ minHeight: "100%" }}>
+        <section className="dash-mobile">
+          {mobileDashHeader}
+          <div
+            className="card"
+            style={{
+              margin: "0 16px 24px",
+              padding: 24,
+              fontSize: 14,
+              color: "var(--gray-500)",
+              lineHeight: 1.5,
+            }}
+          >
+            Associe um cliente à sua conta para ver o painel.
+          </div>
+        </section>
+        <section className="dash-desktop">
+          <div style={{ padding: 32, color: "var(--gray-500)", fontSize: 14 }}>
+            Associe um cliente à sua conta para ver o painel.
+          </div>
+        </section>
       </div>
     );
   }
@@ -414,39 +469,7 @@ export default function DashboardPage() {
   return (
     <div style={{ minHeight: "100%" }}>
       <section className="dash-mobile">
-        <div className="dash-mobile-header">
-          <Link href="/dashboard" className="dash-mobile-logo-link" aria-label="Ir para Início">
-            <Image src="/branding/logo-gege-purple-transparent.png" alt="" width={118} height={34} className="dash-mobile-logo" />
-          </Link>
-          <div className="dash-mobile-profile-wrap" ref={mobileProfileRef}>
-            <button type="button" className="dash-mobile-brand" onClick={() => setMobileProfileOpen((v) => !v)}>
-              <span className="dash-mobile-brand-avatar">
-                {((cliente.nome_contato?.trim().slice(0, 2) || "Gi").replace(/\s+/g, "").slice(0, 2) || "Gi").toUpperCase()}
-              </span>
-              <span className="dash-mobile-brand-copy">
-                <span className="dash-mobile-brand-person">{cliente.nome_contato?.trim() || "Recrutador"}</span>
-                <span className="dash-mobile-brand-company">{cliente.nome_empresa?.trim() || "Cliente"}</span>
-              </span>
-            </button>
-            {mobileProfileOpen ? (
-              <div className="dash-mobile-profile-menu">
-                <button
-                  type="button"
-                  className="dash-mobile-profile-item"
-                  onClick={() => {
-                    setMobileProfileOpen(false);
-                    router.push("/configuracoes");
-                  }}
-                >
-                  Configurações
-                </button>
-                <button type="button" className="dash-mobile-profile-item dash-mobile-profile-item-danger" onClick={onMobileLogout}>
-                  Logout
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
+        {mobileDashHeader}
 
         <div className="grid-4 dash-mobile-metrics">
           {metricCards.map((m, i) => (
@@ -530,7 +553,7 @@ export default function DashboardPage() {
                   <Link key={`tc-${r.id}`} href={`/candidatos/${r.candidatoId}?vaga=${encodeURIComponent(r.vagaId)}`} className="dash-mobile-cand-card card-sm">
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div className="av">{initials(r.nome)}</div>
+                        <div className="av">{initialsFromDisplayName(r.nome)}</div>
                         <div>
                           <div style={{ fontWeight: 700, color: "var(--n900)" }}>{r.nome}</div>
                           <div className="cand-loc">{loc || "—"}</div>
@@ -757,7 +780,7 @@ export default function DashboardPage() {
                       <tr key={r.id}>
                         <td>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div className="av">{initials(r.nome)}</div>
+                            <div className="av">{initialsFromDisplayName(r.nome)}</div>
                             <div>
                               <div style={{ fontWeight: 600, color: "var(--gray-900)" }}>{r.nome}</div>
                               <div className="cand-loc">{loc}</div>

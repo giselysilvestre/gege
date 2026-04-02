@@ -23,8 +23,11 @@ export default function LoginPage() {
     let redirecting = false;
     try {
       const supabase = getSupabaseBrowserClient();
+      // Sem isso, o cookie/sessão do usuário anterior pode continuar ativo e o painel mostra o nome errado.
+      await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+      const normalizedEmail = email.trim().toLowerCase();
       const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+        email: normalizedEmail,
         password: senha,
       });
       if (signInError) throw signInError;

@@ -4,6 +4,9 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser'
+import { ensureClienteForUser } from '@/lib/ensureClienteBrowser'
+import { displayNameFromUser, initialsFromDisplayName } from '@/lib/displayNameFromUser'
+import { getAuthUserWithFreshMetadata } from '@/lib/getAuthUserWithFreshMetadata'
 
 const NAV = [
   { href: '/dashboard', label: 'Início', icon: <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 flex-shrink-0"><path d="M2 8.5L9 2l7 6.5V16a1 1 0 01-1 1H3a1 1 0 01-1-1V8.5z"/><path d="M6 17v-6h6v6"/></svg> },
@@ -18,7 +21,35 @@ export default function Sidebar() {
   const router = useRouter()
   const [profileOpen, setProfileOpen] = useState(false)
   const profileRef = useRef<HTMLDivElement | null>(null)
+  const [profilePerson, setProfilePerson] = useState('—')
+  const [profileCompany, setProfileCompany] = useState('—')
+  const [profileInitials, setProfileInitials] = useState('—')
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const sb = getSupabaseBrowserClient()
+      const user = await getAuthUserWithFreshMetadata(sb)
+      if (!user || cancelled) {
+        if (!cancelled) {
+          setProfilePerson('Recrutador')
+          setProfileCompany('—')
+          setProfileInitials('?')
+        }
+        return
+      }
+      const name = displayNameFromUser(user)
+      setProfilePerson(name)
+      setProfileInitials(initialsFromDisplayName(name))
+      const cli = await ensureClienteForUser(sb, user)
+      if (cancelled) return
+      setProfileCompany(cli?.nome_empresa?.trim() || '—')
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (!profileOpen) return
@@ -69,10 +100,10 @@ export default function Sidebar() {
       <div className="px-2.5 py-3.5 border-t border-white/10">
         <div ref={profileRef} style={{ position: 'relative' }}>
           <button type="button" onClick={() => setProfileOpen((v) => !v)} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl" style={{ background: 'var(--sidebar-profile-bg)' }}>
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ background: 'var(--olive)', color: 'var(--berry)' }}>Gi</div>
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ background: 'var(--olive)', color: 'var(--berry)' }}>{profileInitials}</div>
             <div className="min-w-0 flex-1 text-left">
-              <div className="text-sm font-semibold text-white/90 truncate">Gisely</div>
-              <div className="text-xs text-white/40 truncate">Tapí Tapioca</div>
+              <div className="text-sm font-semibold text-white/90 truncate">{profilePerson}</div>
+              <div className="text-xs text-white/40 truncate">{profileCompany}</div>
             </div>
           </button>
           {profileOpen ? (
