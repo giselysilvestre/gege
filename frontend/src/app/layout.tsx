@@ -18,6 +18,9 @@ const plusJakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: 'gegê — Recrutamento',
   description: 'Recrutamento inteligente para food service',
+  verification: {
+    google: 'fBzvKVCJMA9a8-_OKBkHVOeHxBE30_dMSoe66Q6ioW4',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
