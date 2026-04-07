@@ -1,4 +1,5 @@
 'use client'
+import { Suspense } from 'react'
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -9,7 +10,7 @@ type Cliente = {
   slug: string
 }
 
-export default function SelecionarClientePage() {
+function SelecionarClienteContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -51,5 +52,13 @@ export default function SelecionarClientePage() {
         </div>
       </div>
     </main>
+  )
+}
+
+export default function SelecionarClientePage() {
+  return (
+    <Suspense fallback={null}>
+      <SelecionarClienteContent />
+    </Suspense>
   )
 }
