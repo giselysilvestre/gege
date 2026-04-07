@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ensureClienteForUser } from "@/lib/ensureClienteBrowser";
-import { VagasLista } from "./VagasLista";
+import { VagasLista } from "../VagasLista";
 import { devError } from "@/lib/devLog";
 import type { JobCardVaga } from "@/components/JobCard";
 

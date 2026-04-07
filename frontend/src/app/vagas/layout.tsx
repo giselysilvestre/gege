@@ -1,6 +1,3 @@
-import { requireAuth } from "@/app/_private/require-auth";
-
-export default async function VagasLayout({ children }: { children: React.ReactNode }) {
-  await requireAuth();
+export default function VagasLayout({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
