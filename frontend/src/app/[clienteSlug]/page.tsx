@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
-import CarreiraPublicaView from "@/app/carreira/ui/CarreiraPublicaView";
+import CarreiraPublicaView from "@/app/[clienteSlug]/carreira/ui/CarreiraPublicaView";
 import { getCarreiraPublicaBySlug } from "@/lib/data/carreira-publica";
 
 type Props = {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ clienteSlug: string }>;
 };
 
 const RESERVED = new Set([
@@ -18,8 +18,8 @@ const RESERVED = new Set([
 ]);
 
 export default async function PublicSlugPage({ params }: Props) {
-  const { slug } = await params;
-  const normalized = slug.trim().toLowerCase();
+  const { clienteSlug } = await params;
+  const normalized = clienteSlug.trim().toLowerCase();
 
   if (!normalized || RESERVED.has(normalized)) {
     notFound();

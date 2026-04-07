@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import CarreiraPublicaView from "@/app/carreira/ui/CarreiraPublicaView";
+import CarreiraPublicaView from "@/app/[clienteSlug]/carreira/ui/CarreiraPublicaView";
 import { getCarreiraPublicaBySlug } from "@/lib/data/carreira-publica";
 
 type Props = {

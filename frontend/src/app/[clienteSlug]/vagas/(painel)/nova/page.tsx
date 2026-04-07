@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toSlug } from "@/lib/slug";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { ensureClienteForUser } from "@/lib/ensureClienteBrowser";
 import { devWarn } from "@/lib/devLog";
+import { useClienteSlug } from "@/lib/context/ClienteSlugContext";
+import { getClienteBySlug } from "@/lib/getClienteBySlug";
 
 const FALLBACK_CARGOS = [
   "Atendente",
@@ -95,6 +96,7 @@ function buildBeneficiosSummaryLabel(
 }
 
 export default function NovaVagaPage() {
+  const slug = useClienteSlug();
   const [nomeVaga, setNomeVaga] = useState("");
   const [cargoCatalogoId, setCargoCatalogoId] = useState("");
   const [legacyCargo, setLegacyCargo] = useState("");
@@ -132,7 +134,7 @@ export default function NovaVagaPage() {
       if (!sess.session?.user) {
         return;
       }
-      const cli = await ensureClienteForUser(sb, sess.session.user);
+      const cli = await getClienteBySlug(slug);
       if (!cli?.id) {
         return;
       }
@@ -154,7 +156,7 @@ export default function NovaVagaPage() {
       setCatalogUnidades((uRes.data as RowUnidade[]) ?? []);
       setCatalogCargos((cRes.data as RowCargo[]) ?? []);
     })();
-  }, []);
+  }, [slug]);
 
   useEffect(() => {
     if (!cargoCatalogoId) return;
@@ -258,7 +260,7 @@ export default function NovaVagaPage() {
       const accessToken = sess.session?.access_token;
       if (!accessToken) throw new Error("Sessão expirada. Faça login de novo.");
 
-      const slug = `${toSlug(cargoNome)}-${Date.now()}`;
+      const vagaSlug = `${toSlug(cargoNome)}-${Date.now()}`;
       const escalaApi = escala.replace("×", "x");
       const tituloPub = nomeVaga.trim() || null;
       const unidadeTxt = resolveUnidadeTexto();
@@ -286,19 +288,20 @@ export default function NovaVagaPage() {
           unidade: unidadeTxt,
           unidade_id: unidadeCatalogoId || null,
           cargo_catalogo_id: cargoCatalogoId || null,
-          slug,
+          slug: vagaSlug,
+          clienteSlug: slug,
         }),
       });
       const payload = (await createRes.json().catch(() => ({}))) as { message?: string; id?: string };
       if (!createRes.ok) throw new Error(payload.message || "Não foi possível criar a vaga");
       const id = payload.id;
       if (!id) throw new Error("Resposta da API sem id da vaga");
-      const matchRes = await fetch(`/api/vagas/${id}/match`, { method: "POST", credentials: "include" });
+      const matchRes = await fetch(`/api/vagas/${id}/match?clienteSlug=${encodeURIComponent(slug)}`, { method: "POST", credentials: "include" });
       if (!matchRes.ok) {
         const m = (await matchRes.json().catch(() => ({}))) as { message?: string };
         devWarn("[vagas/nova] match:", m.message ?? matchRes.status);
       }
-      router.push(`/vagas/${id}`);
+      router.push(`/${slug}/vagas/${id}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao publicar vaga");
@@ -310,7 +313,7 @@ export default function NovaVagaPage() {
   return (
     <div style={{ minHeight: "100%" }}>
       <div className="mb16">
-        <Link href="/vagas" className="btn btn-ghost btn-sm">
+        <Link href={`/${slug}/vagas`} className="btn btn-ghost btn-sm">
           ← Voltar
         </Link>
       </div>
@@ -580,7 +583,7 @@ export default function NovaVagaPage() {
             <button className="btn btn-primary" type="button" disabled={loading} onClick={() => void publicar()}>
               {loading ? "Publicando…" : "Publicar vaga"}
             </button>
-            <Link href="/vagas" className="btn btn-ghost">
+            <Link href={`/${slug}/vagas`} className="btn btn-ghost">
               Cancelar
             </Link>
           </div>

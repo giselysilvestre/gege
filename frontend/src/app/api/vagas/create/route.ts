@@ -69,6 +69,7 @@ export async function POST(request: Request) {
     beneficios_json?: unknown;
     unidade_id?: string | null;
     cargo_catalogo_id?: string | null;
+    clienteSlug?: string | null;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -103,7 +104,15 @@ export async function POST(request: Request) {
         })
       : await getSupabaseRouteHandlerClient();
 
-  const cliente = await getCurrentCliente(supabase, { accessToken: token });
+  const clienteSlug = body.clienteSlug?.trim();
+  const { data: clienteBySlug } = clienteSlug
+    ? await supabase
+        .from("clientes")
+        .select("id, nome_empresa, email, nome_contato")
+        .eq("slug", clienteSlug)
+        .single()
+    : { data: null };
+  const cliente = clienteBySlug ?? (await getCurrentCliente(supabase, { accessToken: token }));
   if (!cliente?.id) {
     return NextResponse.json(
       { message: "Sessão inválida ou cliente não encontrado. Faça login de novo." },

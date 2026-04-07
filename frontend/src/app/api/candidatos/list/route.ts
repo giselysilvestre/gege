@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getSupabaseRouteHandlerClient } from "@/lib/supabase/server";
 import { getCurrentCliente } from "@/lib/data";
 import { vagaTituloPublico } from "@/lib/vaga-display";
-import type { CandidatoInscricaoRow } from "@/app/candidatos/ui/CandidatoInscricaoCard";
+import type { CandidatoInscricaoRow } from "@/app/[clienteSlug]/candidatos/ui/CandidatoInscricaoCard";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { devError } from "@/lib/devLog";
 
@@ -72,6 +72,7 @@ async function handleCandidatosListGet(request: Request) {
   const page = parsePositiveInt(reqUrl.searchParams.get("page"), 1);
   const pageSize = Math.min(200, parsePositiveInt(reqUrl.searchParams.get("pageSize"), 100));
   const vagaFilter = reqUrl.searchParams.get("vaga")?.trim() || null;
+  const clienteSlug = reqUrl.searchParams.get('clienteSlug')?.trim() || null
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
@@ -94,7 +95,16 @@ async function handleCandidatosListGet(request: Request) {
 
   const debug: Record<string, unknown> = {};
 
-  const cliente = await getCurrentCliente(supabase, { accessToken: token });
+  const clienteBySlug = clienteSlug
+    ? (
+        await supabase
+          .from('clientes')
+          .select('id, nome_empresa, email, nome_contato')
+          .eq('slug', clienteSlug)
+          .single()
+      ).data
+    : null
+  const cliente = clienteBySlug ?? await getCurrentCliente(supabase, { accessToken: token })
   if (!cliente?.id) {
     return jsonWithOptionalDebug({ message: "Cliente não encontrado" }, { ...debug, cliente: null }, { status: 401 });
   }

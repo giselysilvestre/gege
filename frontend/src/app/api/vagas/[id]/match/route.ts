@@ -35,6 +35,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 
   const token = bearerToken(request);
+  const { searchParams } = new URL(request.url);
+  const clienteSlug = searchParams.get("clienteSlug")?.trim() || null;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const supabaseUser =
@@ -45,7 +47,14 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         })
       : await getSupabaseRouteHandlerClient();
 
-  const cliente = await getCurrentCliente(supabaseUser, { accessToken: token });
+  const { data: clienteBySlug } = clienteSlug
+    ? await supabaseUser
+        .from("clientes")
+        .select("id, nome_empresa, email, nome_contato")
+        .eq("slug", clienteSlug)
+        .single()
+    : { data: null };
+  const cliente = clienteBySlug ?? (await getCurrentCliente(supabaseUser, { accessToken: token }));
   if (!cliente?.id) {
     return NextResponse.json({ message: "Não autorizado" }, { status: 401 });
   }

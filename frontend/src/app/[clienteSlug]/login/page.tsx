@@ -1,9 +1,13 @@
 'use client'
-import Image from 'next/image'
 import { useState } from 'react'
+import Image from 'next/image'
+import { useParams, useRouter } from 'next/navigation'
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser'
 
-export default function LoginPage() {
+export default function LoginClientePage() {
+  const params = useParams()
+  const clienteSlug = params?.clienteSlug as string
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [error, setError] = useState('')
@@ -17,45 +21,15 @@ export default function LoginPage() {
     try {
       const supabase = getSupabaseBrowserClient()
       await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
-
       const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password: senha,
       })
       if (signInError) throw signInError
       if (!authData?.session) throw new Error('Sessão não foi criada.')
-
-      const { data: memRows } = await supabase
-        .from('cliente_membros')
-        .select('cliente_id')
-        .eq('user_id', authData.session.user.id)
-        .order('criado_em', { ascending: true })
-        .limit(10)
-
-      if (!memRows?.length) throw new Error('Nenhum cliente associado a este usuário.')
-
-      if (memRows.length === 1) {
-        const { data: clienteRows } = await supabase
-          .from('clientes')
-          .select('slug')
-          .eq('id', memRows[0].cliente_id)
-          .single()
-
-        if (!clienteRows?.slug) throw new Error('Cliente sem slug configurado.')
-        redirecting = true
-        window.location.assign(`${window.location.origin}/${clienteRows.slug}/dashboard`)
-      } else {
-        const ids = memRows.map(m => m.cliente_id)
-        const { data: clientes } = await supabase
-          .from('clientes')
-          .select('id, nome_empresa, slug')
-          .in('id', ids)
-
-        const params = new URLSearchParams()
-        params.set('clientes', JSON.stringify(clientes))
-        redirecting = true
-        window.location.assign(`${window.location.origin}/login/selecionar?${params.toString()}`)
-      }
+      redirecting = true
+      await new Promise((r) => setTimeout(r, 0))
+      window.location.assign(`${window.location.origin}/${clienteSlug}/dashboard`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao entrar')
     } finally {

@@ -6,9 +6,10 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { ensureClienteForUser, type ClienteEmpresa } from "@/lib/ensureClienteBrowser";
+import type { ClienteEmpresa } from "@/lib/ensureClienteBrowser";
 import { displayNameFromUser, initialsFromDisplayName } from "@/lib/displayNameFromUser";
 import { getAuthUserWithFreshMetadata } from "@/lib/getAuthUserWithFreshMetadata";
+import { useClienteSlug } from '@/lib/context/ClienteSlugContext'
 import {
   funnelRowsFromStatuses,
   isNoFunil,
@@ -164,6 +165,7 @@ function bestByCandidate(rows: TopRow[]): TopRow[] {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const slug = useClienteSlug()
   const [loading, setLoading] = useState(true);
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [cliente, setCliente] = useState<ClienteEmpresa | null>(null);
@@ -192,7 +194,12 @@ export default function DashboardPage() {
         return;
       }
       setAuthUser(user);
-      const cli = await ensureClienteForUser(sb, user);
+      const { data: clienteRows } = await sb
+        .from('clientes')
+        .select('id, nome_empresa, email, nome_contato')
+        .eq('slug', slug)
+        .limit(1)
+      const cli = clienteRows?.[0] ?? null
       setCliente(cli);
       if (!cli?.id) {
         setLoading(false);
@@ -309,7 +316,7 @@ export default function DashboardPage() {
 
       let tops: TopRow[] = [];
       try {
-        const res = await fetch("/api/candidatos/list?page=1&pageSize=80", { cache: "default" });
+        const res = await fetch(`/api/candidatos/list?page=1&pageSize=80&clienteSlug=${slug}`, { cache: "default" });
         if (res.ok) {
           const json = (await res.json()) as {
             rows?: Array<{
@@ -407,7 +414,7 @@ export default function DashboardPage() {
 
   const mobileDashHeader = (
     <div className="dash-mobile-header">
-      <Link href="/dashboard" className="dash-mobile-logo-link" aria-label="Ir para Início">
+      <Link href={`/${slug}/dashboard`} className="dash-mobile-logo-link" aria-label="Ir para Início">
         <Image src="/branding/logo-gege-purple-transparent.png" alt="" width={118} height={34} className="dash-mobile-logo" />
       </Link>
       <div className="dash-mobile-profile-wrap" ref={mobileProfileRef}>
@@ -425,7 +432,7 @@ export default function DashboardPage() {
               className="dash-mobile-profile-item"
               onClick={() => {
                 setMobileProfileOpen(false);
-                router.push("/configuracoes");
+                router.push(`/${slug}/configuracoes`);
               }}
             >
               Configurações
@@ -488,7 +495,7 @@ export default function DashboardPage() {
         <div className="dash-mobile-section card">
           <div className="dash-mobile-section-head">
             <h2>Vagas</h2>
-            <Link href="/vagas/nova" className="dash-mobile-new-btn">+ Nova Vaga</Link>
+            <Link href={`/${slug}/vagas/nova`} className="dash-mobile-new-btn">+ Nova Vaga</Link>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {vagas.slice(0, 3).map((v) => {
@@ -498,7 +505,7 @@ export default function DashboardPage() {
               const uni = vagaUnidadePublica(v);
               const meta = [sal, v.escala?.trim() || null, v.horario?.trim() || null].filter(Boolean) as string[];
               return (
-                <Link key={`mv-${v.id}`} href={`/candidatos?vaga=${v.id}`} className="dash-mobile-job-card">
+                <Link key={`mv-${v.id}`} href={`/${slug}/candidatos?vaga=${v.id}`} className="dash-mobile-job-card">
                   <div style={{ fontWeight: 700, fontSize: 15, color: "var(--gray-900)", marginBottom: 6 }}>{vagaTituloPublico(v)}</div>
                   {uni ? (
                     <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 6 }}>{uni}</div>
@@ -529,7 +536,7 @@ export default function DashboardPage() {
             {vagas.length === 0 ? <p style={{ fontSize: 13, color: "var(--n500)", margin: 0 }}>Nenhuma vaga ativa.</p> : null}
           </div>
           <div className="dash-mobile-vagas-footer">
-            <Link href="/vagas" className="dash-mobile-link">Ver todas</Link>
+            <Link href={`/${slug}/vagas`} className="dash-mobile-link">Ver todas</Link>
           </div>
         </div>
 
@@ -550,7 +557,7 @@ export default function DashboardPage() {
                   .join(" · ");
                 const sc = normalizePercentScore(r.score);
                 return (
-                  <Link key={`tc-${r.id}`} href={`/candidatos/${r.candidatoId}?vaga=${encodeURIComponent(r.vagaId)}`} className="dash-mobile-cand-card card-sm">
+                  <Link key={`tc-${r.id}`} href={`/${slug}/candidatos/${r.candidatoId}?vaga=${encodeURIComponent(r.vagaId)}`} className="dash-mobile-cand-card card-sm">
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <div className="av">{initialsFromDisplayName(r.nome)}</div>
@@ -581,7 +588,7 @@ export default function DashboardPage() {
             )}
           </div>
           <div className="dash-mobile-vagas-footer">
-            <Link href="/candidatos" className="dash-mobile-link">Ver todos</Link>
+            <Link href={`/${slug}/candidatos`} className="dash-mobile-link">Ver todos</Link>
           </div>
         </div>
       </section>
@@ -646,7 +653,7 @@ export default function DashboardPage() {
               }}
             >
               <div style={{ fontWeight: 700, fontSize: 15, color: "var(--gray-900)" }}>Vagas</div>
-              <Link href="/vagas" className="btn btn-ghost btn-sm" style={{ fontWeight: 600 }}>
+              <Link href={`/${slug}/vagas`} className="btn btn-ghost btn-sm" style={{ fontWeight: 600 }}>
                 Ver todas →
               </Link>
             </div>
@@ -662,7 +669,7 @@ export default function DashboardPage() {
                 return (
                   <Link
                     key={v.id}
-                    href={`/candidatos?vaga=${v.id}`}
+                    href={`/${slug}/candidatos?vaga=${v.id}`}
                     style={{
                       display: "block",
                       borderRadius: 12,
@@ -733,7 +740,7 @@ export default function DashboardPage() {
             }}
           >
             <div style={{ fontWeight: 700, fontSize: 15, color: "var(--gray-900)" }}>Top candidatos</div>
-            <Link href="/candidatos" className="btn btn-ghost btn-sm" style={{ fontWeight: 600 }}>
+            <Link href={`/${slug}/candidatos`} className="btn btn-ghost btn-sm" style={{ fontWeight: 600 }}>
               Ver todos →
             </Link>
           </div>
@@ -808,7 +815,7 @@ export default function DashboardPage() {
                         </td>
                         <td>
                           <Link
-                            href={`/candidatos/${r.candidatoId}?vaga=${encodeURIComponent(r.vagaId)}`}
+                            href={`/${slug}/candidatos/${r.candidatoId}?vaga=${encodeURIComponent(r.vagaId)}`}
                             className="btn btn-ghost btn-xs"
                             onClick={(e) => e.stopPropagation()}
                           >

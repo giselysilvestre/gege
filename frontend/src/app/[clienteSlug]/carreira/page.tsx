@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { ensureClienteForUser } from "@/lib/ensureClienteBrowser";
 import { vagaTituloPublico } from "@/lib/vaga-display";
 import { devWarn } from "@/lib/devLog";
+import { useClienteSlug } from "@/lib/context/ClienteSlugContext";
+import { getClienteBySlug } from "@/lib/getClienteBySlug";
 
 function waDigits(v: string | null | undefined) {
   if (!v) return "";
@@ -44,6 +45,7 @@ type Vaga = {
 };
 
 export default function CarreiraPage() {
+  const slug = useClienteSlug();
   const [loading, setLoading] = useState(true);
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [config, setConfig] = useState<CarreiraConfig | null>(null);
@@ -55,38 +57,43 @@ export default function CarreiraPage() {
   useEffect(() => {
     void (async () => {
       const sb = getSupabaseBrowserClient();
-      const { data: s } = await sb.auth.getSession();
-      let q = sb
+      const cli = await getClienteBySlug(slug);
+      if (!cli?.id) {
+        setVagas([]);
+        setCliente(null);
+        setConfig(null);
+        setLoading(false);
+        return;
+      }
+
+      const [{ data: cr }, { data: cfg }] = await Promise.all([
+        sb
+          .from("clientes")
+          .select("nome_empresa,descricao,sobre,whatsapp,cidade")
+          .eq("id", cli.id)
+          .maybeSingle(),
+        sb
+          .from("cliente_configuracoes")
+          .select("nome_marca,cor_primaria,carreira_trabalhe_texto,carreira_sobre_texto,carreira_logo_url,carreira_capa_url,carreira_texto_cor,instagram_url,linkedin_url,site_url")
+          .eq("cliente_id", cli.id)
+          .maybeSingle(),
+      ]);
+      setCliente((cr as Cliente) ?? null);
+      setConfig((cfg as CarreiraConfig) ?? null);
+
+      const q = sb
         .from("vagas")
         .select("id,cargo,titulo_publicacao,salario,modelo_contratacao,escala,horario,quantidade_vagas,descricao,status_vaga")
+        .eq("cliente_id", cli.id)
         .in("status_vaga", ["aberta", "em_selecao"])
         .order("criado_em", { ascending: false });
-      if (s.session?.user) {
-        const cli = await ensureClienteForUser(sb, s.session.user);
-        if (cli?.id) {
-          const [{ data: cr }, { data: cfg }] = await Promise.all([
-            sb
-            .from("clientes")
-            .select("nome_empresa,descricao,sobre,whatsapp,cidade")
-            .eq("id", cli.id)
-            .maybeSingle(),
-            sb
-              .from("cliente_configuracoes")
-              .select("nome_marca,cor_primaria,carreira_trabalhe_texto,carreira_sobre_texto,carreira_logo_url,carreira_capa_url,carreira_texto_cor,instagram_url,linkedin_url,site_url")
-              .eq("cliente_id", cli.id)
-              .maybeSingle(),
-          ]);
-          setCliente(cr as Cliente ?? null);
-          setConfig(cfg as CarreiraConfig ?? null);
-          q = q.eq("cliente_id", cli.id);
-        }
-      }
       const { data: v, error: ve } = await q;
       if (ve) {
         devWarn("[carreira] fallback vagas:", ve.message);
         const fallback = await sb
           .from("vagas")
           .select("id,cargo,titulo_publicacao,salario,escala,horario,quantidade_vagas,descricao,status_vaga")
+          .eq("cliente_id", cli.id)
           .in("status_vaga", ["aberta", "em_selecao"])
           .order("criado_em", { ascending: false });
         setVagas((fallback.data as Vaga[]) ?? []);
@@ -95,7 +102,7 @@ export default function CarreiraPage() {
       }
       setLoading(false);
     })();
-  }, []);
+  }, [slug]);
 
   useEffect(() => {
     const cover = config?.carreira_capa_url?.trim();

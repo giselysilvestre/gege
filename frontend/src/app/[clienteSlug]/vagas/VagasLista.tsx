@@ -9,6 +9,7 @@ import { vagaTituloPublico, vagaUnidadePublica } from "@/lib/vaga-display";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ActiveFilterChips } from "@/components/ui/ActiveFilterChips";
 import { devError } from "@/lib/devLog";
+import { useClienteSlug } from "@/lib/context/ClienteSlugContext";
 
 type Props = {
   initialVagas: JobCardVaga[];
@@ -70,6 +71,7 @@ function statusSelectLabel(status: string) {
 }
 
 export function VagasLista({ initialVagas, errorMessage }: Props) {
+  const slug = useClienteSlug();
   const router = useRouter();
   const [vagas, setVagas] = useState<JobCardVaga[]>(initialVagas);
   const [q, setQ] = useState("");
@@ -182,10 +184,10 @@ export function VagasLista({ initialVagas, errorMessage }: Props) {
   return (
     <div style={{ minHeight: "100%" }}>
       <div className="flex aic jsb mb16 vagas-head-mobile">
-        <Link href="/dashboard" className="btn btn-ghost btn-sm">
+        <Link href={`/${slug}/dashboard`} className="btn btn-ghost btn-sm">
           ← Voltar
         </Link>
-        <Link href="/vagas/nova" className="dash-mobile-new-btn vagas-new-mobile-only">
+        <Link href={`/${slug}/vagas/nova`} className="dash-mobile-new-btn vagas-new-mobile-only">
           + Nova Vaga
         </Link>
       </div>
@@ -255,10 +257,10 @@ export function VagasLista({ initialVagas, errorMessage }: Props) {
                 const pos = (v as { quantidade_vagas?: number | null }).quantidade_vagas;
                 const aberto = getDaysOpen(v.criado_em, v.status_vaga, v.fechada_em ?? null);
                 return (
-                  <tr key={v.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/candidatos?vaga=${encodeURIComponent(v.id)}`)}>
+                  <tr key={v.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/${slug}/candidatos?vaga=${encodeURIComponent(v.id)}`)}>
                     <td>
                       <Link
-                        href={`/candidatos?vaga=${encodeURIComponent(v.id)}`}
+                        href={`/${slug}/candidatos?vaga=${encodeURIComponent(v.id)}`}
                         className="fw6 fs13"
                         style={{ color: "var(--gray-900)" }}
                         onClick={(e) => e.stopPropagation()}
@@ -308,7 +310,7 @@ export function VagasLista({ initialVagas, errorMessage }: Props) {
           return (
             <Link
               key={`mv-${v.id}`}
-              href={`/candidatos?vaga=${encodeURIComponent(v.id)}`}
+              href={`/${slug}/candidatos?vaga=${encodeURIComponent(v.id)}`}
               className="dash-mobile-job-card"
               style={{ marginBottom: 10 }}
             >

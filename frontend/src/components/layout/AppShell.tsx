@@ -7,6 +7,10 @@ import MobileBottomNav from '@/components/layout/MobileBottomNav'
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? ''
+  const segments = pathname.split('/').filter(Boolean)
+  const firstSegment = segments[0] ?? ''
+  const secondSegment = segments[1] ?? ''
+
   const knownPrivateRoots = new Set([
     'dashboard',
     'vagas',
@@ -15,15 +19,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     'configuracoes',
     'carreira',
   ])
-  const firstSegment = pathname.split('/').filter(Boolean)[0] ?? ''
-  const isPublicTopSlug = Boolean(firstSegment) && !knownPrivateRoots.has(firstSegment) && firstSegment !== 'login'
-  const isPublicCarreiraSlug = pathname.startsWith('/carreira/') && pathname.split('/').filter(Boolean).length >= 2
+
+  const isPrivateRoute = knownPrivateRoots.has(secondSegment)
+  const isPublicCarreiraSlug = firstSegment === 'carreira' && segments.length >= 2
+
   const hideShell =
     pathname === '/login' ||
     pathname.startsWith('/login/') ||
-    isPublicTopSlug ||
+    (!isPrivateRoute && !isPublicCarreiraSlug) ||
     isPublicCarreiraSlug
-  const carreiraOnly = pathname === '/carreira' || pathname.startsWith('/carreira/')
+  const carreiraOnly = false
 
   if (hideShell) return <>{children}</>
 

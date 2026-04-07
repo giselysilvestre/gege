@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { ensureClienteForUser } from "@/lib/ensureClienteBrowser";
 import { devError } from "@/lib/devLog";
+import { useClienteSlug } from "@/lib/context/ClienteSlugContext";
+import { getClienteBySlug } from "@/lib/getClienteBySlug";
 
 type ConfiguracoesCliente = {
   cliente_id: string;
@@ -72,6 +73,7 @@ const EMPTY_CONFIG: Omit<ConfiguracoesCliente, "cliente_id"> = {
 };
 
 export default function ConfiguracoesPage() {
+  const slug = useClienteSlug();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<TabKey>("gerais");
@@ -104,7 +106,7 @@ export default function ConfiguracoesPage() {
     const sb = getSupabaseBrowserClient();
     const { data: s } = await sb.auth.getSession();
     if (!s.session?.user) return setLoading(false);
-    const cli = await ensureClienteForUser(sb, s.session.user);
+    const cli = await getClienteBySlug(slug);
     if (!cli?.id) return setLoading(false);
     setClienteId(cli.id);
 
@@ -148,7 +150,7 @@ export default function ConfiguracoesPage() {
 
   useEffect(() => {
     void loadAll();
-  }, []);
+  }, [slug]);
 
   useEffect(() => {
     const cover = form.carreira_capa_url?.trim();
@@ -362,7 +364,7 @@ export default function ConfiguracoesPage() {
 
   if (loading) return <div className="fs14 c600">Carregando configurações…</div>;
 
-  const slug = (form.nome_marca || "")
+  const empresaSlug = (form.nome_marca || "")
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -689,7 +691,7 @@ export default function ConfiguracoesPage() {
               </div>
               <div style={{ display: "grid", gap: 6 }}>
                 <label className="fs11 fw7 muted" style={{ textTransform: "uppercase" }}>Slug da URL</label>
-                <input className="search-input" value={slug} readOnly />
+                <input className="search-input" value={empresaSlug} readOnly />
               </div>
             </div>
             <div style={{ display: "grid", gap: 6 }}>
