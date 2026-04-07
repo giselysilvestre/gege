@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { ensureClienteForUser } from "@/lib/ensureClienteBrowser";
+import { getClienteBySlug } from "@/lib/getClienteBySlug";
 import { VagasLista } from "../VagasLista";
 import { devError } from "@/lib/devLog";
 import type { JobCardVaga } from "@/components/JobCard";
+import { useClienteSlug } from '@/lib/context/ClienteSlugContext'
 
 export default function VagasPage() {
+  const slug = useClienteSlug()
   const [vagas, setVagas] = useState<JobCardVaga[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,8 +26,8 @@ export default function VagasPage() {
         return;
       }
 
-      const cliente = await ensureClienteForUser(supabase, session.user);
-      if (!cliente?.id) {
+      const cli = await getClienteBySlug(slug)
+      if (!cli?.id) {
         setErrorMessage("Não foi possível identificar o cliente. Faça login de novo.");
         setLoading(false);
         return;
@@ -36,7 +38,7 @@ export default function VagasPage() {
         .select(
           "id,cargo,titulo_publicacao,salario,escala,horario,unidade,descricao,cep_loja,quantidade_vagas,status_vaga,criado_em,fechada_em, cliente_unidades ( nome ), candidaturas ( id, status, score_compatibilidade, candidatos ( id ) )"
         )
-        .eq("cliente_id", cliente.id)
+        .eq("cliente_id", cli.id)
         .order("criado_em", { ascending: false });
 
       if (error) setErrorMessage(error.message);

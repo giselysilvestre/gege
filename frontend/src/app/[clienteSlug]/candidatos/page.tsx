@@ -11,6 +11,8 @@ import { buildExperienciaResumoLinha } from "./ui/candidatosFormat";
 import { useSupabaseBrowser } from "@/lib/supabase/useSupabaseBrowser";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ActiveFilterChips } from "@/components/ui/ActiveFilterChips";
+import { getClienteBySlug } from '@/lib/getClienteBySlug'
+import { useClienteSlug } from '@/lib/context/ClienteSlugContext'
 
 type SortKey = "candidato" | "score" | "etapa" | "inscricao";
 
@@ -123,6 +125,7 @@ function sortArrow(sortBy: SortKey, sortDir: "asc" | "desc", key: SortKey): stri
 }
 
 function CandidatosContent() {
+  const slug = useClienteSlug()
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -146,10 +149,20 @@ function CandidatosContent() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      const cli = await getClienteBySlug(slug)
+      if (!cli?.id) {
+        setNoCliente(true);
+        setRawRows([]);
+        setVagasAtivas([]);
+        setHasMore(false);
+        setLoading(false);
+        return;
+      }
       const qs = new URLSearchParams({
         page: String(page),
         pageSize: String(PAGE_SIZE),
       });
+      qs.set("clienteSlug", slug);
       if (vagaFromQuery) qs.set("vaga", vagaFromQuery);
       const res = await fetch(`/api/candidatos/list?${qs.toString()}`, { cache: "default" });
       const json = (await res.json()) as {
@@ -281,7 +294,7 @@ function CandidatosContent() {
   }, [q, selectedVagaIds, vagasAtivas, selectedTags, statusTodos, statusKeys, kmMax]);
 
   function clearAllFilters() {
-    if (vagaFromQuery) router.replace(pathname || "/candidatos");
+    if (vagaFromQuery) router.replace(pathname || `/${slug}/candidatos`);
     setQ("");
     setSelectedVagaIds([]);
     setSelectedTags([]);
@@ -342,7 +355,7 @@ function CandidatosContent() {
   return (
     <div style={{ minHeight: "100%" }}>
       <div className="flex aic jsb mb16">
-        <Link href="/dashboard" className="btn btn-ghost btn-sm">← Voltar</Link>
+        <Link href={`/${slug}/dashboard`} className="btn btn-ghost btn-sm">← Voltar</Link>
         {!noCliente ? (
           <CandidatosFiltersBar
             vagasAtivas={vagasAtivas}
@@ -461,7 +474,7 @@ function CandidatosContent() {
                     const exp = (r.candidato.exp_resumo?.trim() || "").split(/\n|[;|]/)[0]?.trim() || buildExperienciaResumoLinha(r.candidato) || "—";
                     const nextEtapa = nextLabel(r.status);
                     return (
-                      <tr key={r.candidaturaId} style={{ cursor: "pointer" }} onClick={() => router.push(`/candidatos/${r.candidato.id}?vaga=${encodeURIComponent(r.vagaId)}`)}>
+                      <tr key={r.candidaturaId} style={{ cursor: "pointer" }} onClick={() => router.push(`/${slug}/candidatos/${r.candidato.id}?vaga=${encodeURIComponent(r.vagaId)}`)}>
                         <td>
                           <div className="flex aic g8">
                             <div className="av">{initialsFromNome(r.candidato.nome)}</div>
@@ -525,11 +538,11 @@ function CandidatosContent() {
                   className="candidatos-mobile-card"
                   role="button"
                   tabIndex={0}
-                  onClick={() => router.push(`/candidatos/${r.candidato.id}?vaga=${encodeURIComponent(r.vagaId)}`)}
+                  onClick={() => router.push(`/${slug}/candidatos/${r.candidato.id}?vaga=${encodeURIComponent(r.vagaId)}`)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      router.push(`/candidatos/${r.candidato.id}?vaga=${encodeURIComponent(r.vagaId)}`);
+                      router.push(`/${slug}/candidatos/${r.candidato.id}?vaga=${encodeURIComponent(r.vagaId)}`);
                     }
                   }}
                 >

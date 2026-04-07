@@ -8,6 +8,7 @@ import { normalizePercentScore } from "@/lib/score";
 import { ALLOWED_CANDIDATE_TAGS, toAllowedCandidateTags } from "@/lib/candidate-tags";
 import { ActiveFilterChips } from "@/components/ui/ActiveFilterChips";
 import { devWarn } from "@/lib/devLog";
+import { useClienteSlug } from "@/lib/context/ClienteSlugContext";
 
 type Talento = {
   id: string;
@@ -46,6 +47,7 @@ function BancoScore({ score }: { score: number | null }) {
 }
 
 export default function BancoPage() {
+  const slug = useClienteSlug();
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [talentos, setTalentos] = useState<Talento[]>([]);
@@ -189,7 +191,7 @@ export default function BancoPage() {
   return (
     <div style={{ minHeight: "100%" }}>
       <div className="flex aic jsb mb16">
-        <Link href="/dashboard" className="btn btn-ghost btn-sm">
+        <Link href={`/${slug}/dashboard`} className="btn btn-ghost btn-sm">
           ← Voltar
         </Link>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpenFilters(true)}>
@@ -241,11 +243,11 @@ export default function BancoPage() {
             style={{ textDecoration: "none", color: "inherit", cursor: "pointer" }}
             role="button"
             tabIndex={0}
-            onClick={() => router.push(`/candidatos/${t.id}`)}
+            onClick={() => router.push(`/${slug}/candidatos/${t.id}`)}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                router.push(`/candidatos/${t.id}`);
+                router.push(`/${slug}/candidatos/${t.id}`);
               }
             }}
           >
