@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
 import { normalizePercentScore } from "@/lib/score";
 import {
@@ -114,12 +114,13 @@ export function CandidatoInscricaoCard({
   busy: boolean;
 }) {
   const router = useRouter();
+  const { clienteSlug } = useParams<{ clienteSlug: string }>();
   const c = row.candidato;
   const scoreVal = normalizePercentScore(c.score);
   const instab = candidatoAlertaInstabilidade(c);
   const semExp = candidatoSemExperiencia(c);
   const proxDb = nextDbStatus(row.status);
-  const detailHref = `/candidatos/${c.id}?vaga=${row.vagaId}`;
+  const detailHref = `/${clienteSlug}/candidatos/${c.id}?vaga=${row.vagaId}`;
   const resumoExperiencias = buildExperienciaResumoLinha(c);
   const empTag = employmentSituationTag(c.situacao_emprego);
   const distStr = formatDistanciaOptional(row.distancia_km ?? null);

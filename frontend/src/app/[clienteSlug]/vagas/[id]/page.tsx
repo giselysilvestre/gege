@@ -4,12 +4,12 @@ import { notFound, redirect } from "next/navigation";
 /** Se parecer UUID de vaga, manda para a lista de candidatos (fluxo do painel). */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export default async function VagaPorIdOuSlugPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id: segment } = await params;
+export default async function VagaPorIdOuSlugPage({ params }: { params: Promise<{ id: string; clienteSlug: string }> }) {
+  const { id: segment, clienteSlug } = await params;
   const raw = segment.trim();
 
   if (UUID_RE.test(raw)) {
-    redirect(`/candidatos?vaga=${encodeURIComponent(raw)}`);
+    redirect(`/${clienteSlug}/candidatos?vaga=${encodeURIComponent(raw)}`);
   }
 
   const supabase = await createClient();
