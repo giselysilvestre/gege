@@ -3,12 +3,8 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 export type CarreiraPublicaData = {
   cliente: {
     id: string;
-    slug_url: string;
+    slug: string;
     nome_empresa: string | null;
-    descricao: string | null;
-    sobre: string | null;
-    whatsapp: string | null;
-    cidade: string | null;
   };
   config: {
     nome_marca: string | null;
@@ -24,6 +20,7 @@ export type CarreiraPublicaData = {
   } | null;
   vagas: Array<{
     id: string;
+    slug: string;
     cargo: string;
     titulo_publicacao: string | null;
     salario: number | string | null;
@@ -40,22 +37,20 @@ export async function getCarreiraPublicaBySlug(rawSlug: string): Promise<Carreir
   if (!slug) return null;
 
   const sb = getSupabaseAdmin();
-  const { data: clienteDataBySlug } = await sb
+  const { data: clienteDataBySlug, error } = await sb
     .from("clientes")
-    .select("id,slug_url,nome_empresa,descricao,sobre,whatsapp,cidade")
-    .eq("slug_url", slug)
+    .select("id,slug,nome_empresa")
+    .eq("slug", slug)
     .maybeSingle();
   let clienteRow = clienteDataBySlug as
     | {
         id: string;
-        slug_url: string | null;
+        slug: string | null;
         nome_empresa: string | null;
-        descricao: string | null;
-        sobre: string | null;
-        whatsapp: string | null;
-        cidade: string | null;
       }
     | null;
+
+  console.log("[carreira-debug]", { slug, clienteRow, error });
 
   // Fallback: muitos clientes antigos guardam URL pública em cliente_configuracoes.carreira_url.
   if (!clienteRow?.id) {
@@ -75,19 +70,15 @@ export async function getCarreiraPublicaBySlug(rawSlug: string): Promise<Carreir
     if (cfgUrlRow?.cliente_id) {
       const { data: clienteDataById } = await sb
         .from("clientes")
-        .select("id,slug_url,nome_empresa,descricao,sobre,whatsapp,cidade")
+        .select("id,slug,nome_empresa")
         .eq("id", cfgUrlRow.cliente_id)
         .maybeSingle();
 
       clienteRow = clienteDataById as
         | {
             id: string;
-            slug_url: string | null;
+            slug: string | null;
             nome_empresa: string | null;
-            descricao: string | null;
-            sobre: string | null;
-            whatsapp: string | null;
-            cidade: string | null;
           }
         | null;
     }
@@ -106,7 +97,7 @@ export async function getCarreiraPublicaBySlug(rawSlug: string): Promise<Carreir
       .maybeSingle(),
     sb
       .from("vagas")
-      .select("id,cargo,titulo_publicacao,salario,modelo_contratacao,escala,horario,quantidade_vagas,descricao,status_vaga")
+      .select("id,slug,cargo,titulo_publicacao,salario,modelo_contratacao,escala,horario,quantidade_vagas,descricao,status_vaga")
       .eq("cliente_id", clienteId)
       .in("status_vaga", ["aberta", "em_selecao"])
       .order("criado_em", { ascending: false }),
@@ -129,6 +120,7 @@ export async function getCarreiraPublicaBySlug(rawSlug: string): Promise<Carreir
   const vagasRows = vagasData as
     | Array<{
         id: string;
+        slug: string;
         cargo: string;
         titulo_publicacao: string | null;
         salario: number | string | null;
@@ -143,12 +135,8 @@ export async function getCarreiraPublicaBySlug(rawSlug: string): Promise<Carreir
   return {
     cliente: {
       id: clienteId,
-      slug_url: String(clienteRow.slug_url ?? slug),
+      slug: String(clienteRow.slug ?? slug),
       nome_empresa: (clienteRow.nome_empresa as string | null) ?? null,
-      descricao: (clienteRow.descricao as string | null) ?? null,
-      sobre: (clienteRow.sobre as string | null) ?? null,
-      whatsapp: (clienteRow.whatsapp as string | null) ?? null,
-      cidade: (clienteRow.cidade as string | null) ?? null,
     },
     config: cfgRow
       ? {

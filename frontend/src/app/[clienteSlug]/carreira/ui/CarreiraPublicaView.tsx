@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { vagaTituloPublico } from "@/lib/vaga-display";
 import type { CarreiraPublicaData } from "@/lib/data/carreira-publica";
 
@@ -16,17 +17,15 @@ export default function CarreiraPublicaView({ data }: { data: CarreiraPublicaDat
 
   const nome =
     data.config?.nome_marca?.trim() || data.cliente.nome_empresa || "Empresa";
-  const wa = waDigits(data.cliente.whatsapp);
+  const wa = "";
   const heroTextColor = data.config?.carreira_texto_cor?.trim() || "#ffffff";
 
   const cidades = useMemo(() => {
-    const set = new Set<string>();
-    if (data.cliente.cidade?.trim()) set.add(data.cliente.cidade.trim());
-    return [...set].sort((a, b) => a.localeCompare(b, "pt"));
-  }, [data.cliente.cidade]);
+    return [] as string[];
+  }, []);
 
   const filtered = data.vagas.filter((v) => {
-    if (cidadeFiltro && (data.cliente.cidade?.trim() ?? "") !== cidadeFiltro) return false;
+    if (cidadeFiltro) return false;
     if (!busca.trim()) return true;
     const q = busca.toLowerCase();
     return vagaTituloPublico(v).toLowerCase().includes(q);
@@ -68,12 +67,10 @@ export default function CarreiraPublicaView({ data }: { data: CarreiraPublicaDat
           <div className="career-title">Trabalhe com a gente</div>
           <div className="career-desc">
             {data.config?.carreira_trabalhe_texto?.trim() ||
-              data.cliente.descricao ||
               "Buscamos pessoas dispostas, comprometidas e com vontade de crescer no food service."}
           </div>
           <div className="career-chips">
             <div className="career-chip hi">{filtered.length} vagas abertas</div>
-            {data.cliente.cidade ? <div className="career-chip">{data.cliente.cidade}</div> : null}
             <div className="career-chip">CLT</div>
           </div>
         </div>
@@ -85,8 +82,6 @@ export default function CarreiraPublicaView({ data }: { data: CarreiraPublicaDat
         </div>
         <div style={{ fontSize: 14, color: "var(--gray-700)", lineHeight: 1.7 }}>
           {data.config?.carreira_sobre_texto?.trim() ||
-            data.cliente.sobre?.trim() ||
-            data.cliente.descricao?.trim() ||
             `${nome} esta contratando pessoas comprometidas e com vontade de crescer.`}
         </div>
       </div>
@@ -106,7 +101,12 @@ export default function CarreiraPublicaView({ data }: { data: CarreiraPublicaDat
 
       <div className="career-jobs-list">
         {filtered.map((v) => (
-          <div key={v.id} className="career-job-card">
+          <Link
+            key={v.id}
+            href={`/vagas/${v.slug}`}
+            className="career-job-card"
+            style={{ textDecoration: "none", color: "inherit" }}
+          >
             <div className="career-job-header">
               <div>
                 <div className="career-job-title">{vagaTituloPublico(v)}</div>
@@ -115,7 +115,7 @@ export default function CarreiraPublicaView({ data }: { data: CarreiraPublicaDat
                     v.salario ? `R$ ${Number(v.salario).toLocaleString("pt-BR")}` : null,
                     v.escala?.trim() || null,
                     v.horario?.trim() || null,
-                    data.cliente.cidade ?? "Sao Paulo",
+                    "Sao Paulo",
                     `${v.quantidade_vagas && v.quantidade_vagas > 1 ? v.quantidade_vagas : 1} vaga${
                       v.quantidade_vagas && v.quantidade_vagas > 1 ? "s" : ""
                     }`,
@@ -143,7 +143,7 @@ export default function CarreiraPublicaView({ data }: { data: CarreiraPublicaDat
                 </div>
               )}
             </div>
-          </div>
+          </Link>
         ))}
       </div>
     </div>

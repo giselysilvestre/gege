@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { vagaTituloPublico } from "@/lib/vaga-display";
 import { devWarn } from "@/lib/devLog";
@@ -42,10 +43,12 @@ type Vaga = {
   horario?: string | null;
   quantidade_vagas?: number | null;
   descricao?: string | null;
+  slug?: string | null;
 };
 
 export default function CarreiraPage() {
   const slug = useClienteSlug();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [config, setConfig] = useState<CarreiraConfig | null>(null);
@@ -83,7 +86,7 @@ export default function CarreiraPage() {
 
       const q = sb
         .from("vagas")
-        .select("id,cargo,titulo_publicacao,salario,modelo_contratacao,escala,horario,quantidade_vagas,descricao,status_vaga")
+        .select("id,cargo,titulo_publicacao,salario,modelo_contratacao,escala,horario,quantidade_vagas,descricao,status_vaga,slug")
         .eq("cliente_id", cli.id)
         .in("status_vaga", ["aberta", "em_selecao"])
         .order("criado_em", { ascending: false });
@@ -92,7 +95,7 @@ export default function CarreiraPage() {
         devWarn("[carreira] fallback vagas:", ve.message);
         const fallback = await sb
           .from("vagas")
-          .select("id,cargo,titulo_publicacao,salario,escala,horario,quantidade_vagas,descricao,status_vaga")
+          .select("id,cargo,titulo_publicacao,salario,escala,horario,quantidade_vagas,descricao,status_vaga,slug")
           .eq("cliente_id", cli.id)
           .in("status_vaga", ["aberta", "em_selecao"])
           .order("criado_em", { ascending: false });
@@ -270,46 +273,68 @@ export default function CarreiraPage() {
       </div>
 
       <div className="career-jobs-list">
-        {filtered.map((v) => (
-          <div key={v.id} className="career-job-card">
-            <div className="career-job-header">
-              <div>
-                <div className="career-job-title">{vagaTituloPublico(v)}</div>
-                <div className="career-job-meta">
-                  {[
-                    v.salario ? `R$ ${Number(v.salario).toLocaleString("pt-BR")}` : null,
-                    v.escala?.trim() || null,
-                    v.horario?.trim() || null,
-                    cliente?.cidade ?? "São Paulo",
-                    `${v.quantidade_vagas && v.quantidade_vagas > 1 ? v.quantidade_vagas : 1} vaga${
-                      v.quantidade_vagas && v.quantidade_vagas > 1 ? "s" : ""
-                    }`,
-                  ]
-                    .filter(Boolean)
-                    .join(" • ")}
+        {filtered.map((v) => {
+          const vagaSlug = v.slug?.trim();
+          const podeAbrirPublica = Boolean(vagaSlug);
+          return (
+            <div
+              key={v.id}
+              className="career-job-card"
+              role={podeAbrirPublica ? "link" : undefined}
+              tabIndex={podeAbrirPublica ? 0 : undefined}
+              style={{ cursor: podeAbrirPublica ? "pointer" : "default" }}
+              onClick={() => {
+                if (vagaSlug) router.push(`/vagas/${encodeURIComponent(vagaSlug)}`);
+              }}
+              onKeyDown={(e) => {
+                if (!vagaSlug) return;
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  router.push(`/vagas/${encodeURIComponent(vagaSlug)}`);
+                }
+              }}
+            >
+              <div className="career-job-header">
+                <div>
+                  <div className="career-job-title">{vagaTituloPublico(v)}</div>
+                  <div className="career-job-meta">
+                    {[
+                      v.salario ? `R$ ${Number(v.salario).toLocaleString("pt-BR")}` : null,
+                      v.escala?.trim() || null,
+                      v.horario?.trim() || null,
+                      cliente?.cidade ?? "São Paulo",
+                      `${v.quantidade_vagas && v.quantidade_vagas > 1 ? v.quantidade_vagas : 1} vaga${
+                        v.quantidade_vagas && v.quantidade_vagas > 1 ? "s" : ""
+                      }`,
+                    ]
+                      .filter(Boolean)
+                      .join(" • ")}
+                  </div>
+                </div>
+              </div>
+              <div className="career-job-body open">
+                {v.descricao ? <div className="career-job-desc">{v.descricao}</div> : null}
+                <div onClick={(e) => e.stopPropagation()}>
+                  {wa ? (
+                    <a
+                      href={`https://wa.me/${wa}?text=${encodeURIComponent(`Olá, quero me candidatar para ${vagaTituloPublico(v)}`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-whatsapp"
+                      style={{ marginTop: 14, width: "100%", justifyContent: "center" }}
+                    >
+                      Candidatar-se via WhatsApp
+                    </a>
+                  ) : (
+                    <div className="fs13 muted" style={{ marginTop: 14 }}>
+                      Configure o WhatsApp do cliente
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
-            <div className="career-job-body open">
-              {v.descricao ? <div className="career-job-desc">{v.descricao}</div> : null}
-              {wa ? (
-                <a
-                  href={`https://wa.me/${wa}?text=${encodeURIComponent(`Olá, quero me candidatar para ${vagaTituloPublico(v)}`)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn-whatsapp"
-                  style={{ marginTop: 14, width: "100%", justifyContent: "center" }}
-                >
-                  Candidatar-se via WhatsApp
-                </a>
-              ) : (
-                <div className="fs13 muted" style={{ marginTop: 14 }}>
-                  Configure o WhatsApp do cliente
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

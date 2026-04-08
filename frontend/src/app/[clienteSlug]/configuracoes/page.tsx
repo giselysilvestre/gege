@@ -97,6 +97,7 @@ export default function ConfiguracoesPage() {
   const [previewTextColor, setPreviewTextColor] = useState<"light" | "dark">("light");
   const isNarrow = useSyncExternalStore(subscribeNarrow, getNarrowSnapshot, getNarrowServer);
   const [cargoDetailOpen, setCargoDetailOpen] = useState<Record<string, boolean>>({});
+  const [linkCopiado, setLinkCopiado] = useState(false);
 
   useEffect(() => {
     if (isNarrow) setEditingCargoId(null);
@@ -364,12 +365,18 @@ export default function ConfiguracoesPage() {
 
   if (loading) return <div className="fs14 c600">Carregando configurações…</div>;
 
-  const empresaSlug = (form.nome_marca || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  const linkPublico = `https://gege.ia.br/${slug}`;
+
+  async function copiarLinkPublico() {
+    try {
+      await navigator.clipboard.writeText(linkPublico);
+      setLinkCopiado(true);
+      window.setTimeout(() => setLinkCopiado(false), 2000);
+    } catch {
+      /* clipboard pode falhar fora de HTTPS ou sem permissão */
+    }
+  }
+
   const hasChanges = initialSnapshot !== JSON.stringify({ nextForm: form });
   const initials = (form.nome_marca || "GE").split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]).join("").toUpperCase();
 
@@ -690,8 +697,26 @@ export default function ConfiguracoesPage() {
                 <input className="search-input" value={form.nome_marca ?? ""} onChange={(e) => setForm((p) => ({ ...p, nome_marca: e.target.value }))} />
               </div>
               <div style={{ display: "grid", gap: 6 }}>
-                <label className="fs11 fw7 muted" style={{ textTransform: "uppercase" }}>Slug da URL</label>
-                <input className="search-input" value={empresaSlug} readOnly />
+                <label className="fs11 fw7 muted" style={{ textTransform: "uppercase" }}>Link público</label>
+                <div className="flex aic g8" style={{ gap: 8, flexWrap: "wrap" }}>
+                  <input
+                    readOnly
+                    value={linkPublico}
+                    aria-readonly
+                    className="search-input"
+                    style={{
+                      flex: "1 1 200px",
+                      minWidth: 0,
+                      background: "#f5f5f5",
+                      color: "#888",
+                      cursor: "default",
+                      border: "1px solid #e0e0e0",
+                    }}
+                  />
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => void copiarLinkPublico()}>
+                    {linkCopiado ? "Copiado!" : "Copiar"}
+                  </button>
+                </div>
               </div>
             </div>
             <div style={{ display: "grid", gap: 6 }}>
