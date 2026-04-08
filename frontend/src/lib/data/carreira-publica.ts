@@ -17,6 +17,8 @@ export type CarreiraPublicaData = {
     instagram_url: string | null;
     linkedin_url: string | null;
     site_url: string | null;
+    contato_whatsapp: string | null;
+    contato_telefone: string | null;
   } | null;
   vagas: Array<{
     id: string;
@@ -91,7 +93,7 @@ export async function getCarreiraPublicaBySlug(rawSlug: string): Promise<Carreir
     sb
       .from("cliente_configuracoes")
       .select(
-        "nome_marca,cor_primaria,carreira_trabalhe_texto,carreira_sobre_texto,carreira_logo_url,carreira_capa_url,carreira_texto_cor,instagram_url,linkedin_url,site_url"
+        "nome_marca,cor_primaria,carreira_trabalhe_texto,carreira_sobre_texto,carreira_logo_url,carreira_capa_url,carreira_texto_cor,instagram_url,linkedin_url,site_url,contato_whatsapp,contato_telefone"
       )
       .eq("cliente_id", clienteId)
       .maybeSingle(),
@@ -115,6 +117,8 @@ export async function getCarreiraPublicaBySlug(rawSlug: string): Promise<Carreir
         instagram_url: string | null;
         linkedin_url: string | null;
         site_url: string | null;
+        contato_whatsapp: string | null;
+        contato_telefone: string | null;
       }
     | null;
   const vagasRows = vagasData as
@@ -150,6 +154,8 @@ export async function getCarreiraPublicaBySlug(rawSlug: string): Promise<Carreir
           instagram_url: (cfgRow.instagram_url as string | null) ?? null,
           linkedin_url: (cfgRow.linkedin_url as string | null) ?? null,
           site_url: (cfgRow.site_url as string | null) ?? null,
+          contato_whatsapp: (cfgRow.contato_whatsapp as string | null) ?? null,
+          contato_telefone: (cfgRow.contato_telefone as string | null) ?? null,
         }
       : null,
     vagas: vagasRows ?? [],

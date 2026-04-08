@@ -119,11 +119,13 @@ type VagaRow = {
     cliente_configuracoes?:
       | {
           contato_whatsapp?: string | null
+          contato_telefone?: string | null
           logo_url?: string | null
           carreira_logo_url?: string | null
         }
       | Array<{
           contato_whatsapp?: string | null
+          contato_telefone?: string | null
           logo_url?: string | null
           carreira_logo_url?: string | null
         }>
@@ -168,8 +170,10 @@ function pickPublicLogoUrl(clientes: VagaRow['clientes']): string | null {
 
 function pickContatoWhatsapp(clientes: VagaRow['clientes']): string | null {
   const row = pickCfgRow(clientes)
-  const fromCfg = row?.contato_whatsapp?.trim()
-  return fromCfg || null
+  const wa = row?.contato_whatsapp?.trim()
+  if (wa) return wa
+  const tel = row?.contato_telefone?.trim()
+  return tel || null
 }
 
 export default async function VagaPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -201,6 +205,7 @@ export default async function VagaPage({ params }: { params: Promise<{ slug: str
         nome_empresa,
         cliente_configuracoes (
           contato_whatsapp,
+          contato_telefone,
           logo_url,
           carreira_logo_url
         )

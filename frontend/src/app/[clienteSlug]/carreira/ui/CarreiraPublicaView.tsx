@@ -17,7 +17,15 @@ export default function CarreiraPublicaView({ data }: { data: CarreiraPublicaDat
 
   const nome =
     data.config?.nome_marca?.trim() || data.cliente.nome_empresa || "Empresa";
-  const wa = "";
+  /** WhatsApp público: config primeiro, depois telefone de contato. */
+  const wa = useMemo(() => {
+    const cfg = data.config;
+    if (!cfg) return "";
+    const w = cfg.contato_whatsapp?.trim();
+    if (w) return waDigits(w);
+    const t = cfg.contato_telefone?.trim();
+    return t ? waDigits(t) : "";
+  }, [data.config]);
   const heroTextColor = data.config?.carreira_texto_cor?.trim() || "#ffffff";
 
   const cidades = useMemo(() => {
@@ -134,14 +142,11 @@ export default function CarreiraPublicaView({ data }: { data: CarreiraPublicaDat
                   rel="noopener noreferrer"
                   className="btn btn-whatsapp"
                   style={{ marginTop: 14, width: "100%", justifyContent: "center" }}
+                  onClick={(e) => e.stopPropagation()}
                 >
                   Candidatar-se via WhatsApp
                 </a>
-              ) : (
-                <div className="fs13 muted" style={{ marginTop: 14 }}>
-                  Contato indisponivel no momento
-                </div>
-              )}
+              ) : null}
             </div>
           </Link>
         ))}

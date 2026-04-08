@@ -32,6 +32,8 @@ type CarreiraConfig = {
   instagram_url: string | null;
   linkedin_url: string | null;
   site_url: string | null;
+  contato_whatsapp: string | null;
+  contato_telefone: string | null;
 };
 type Vaga = {
   id: string;
@@ -77,7 +79,7 @@ export default function CarreiraPage() {
           .maybeSingle(),
         sb
           .from("cliente_configuracoes")
-          .select("nome_marca,cor_primaria,carreira_trabalhe_texto,carreira_sobre_texto,carreira_logo_url,carreira_capa_url,carreira_texto_cor,instagram_url,linkedin_url,site_url")
+          .select("nome_marca,cor_primaria,carreira_trabalhe_texto,carreira_sobre_texto,carreira_logo_url,carreira_capa_url,carreira_texto_cor,instagram_url,linkedin_url,site_url,contato_whatsapp,contato_telefone")
           .eq("cliente_id", cli.id)
           .maybeSingle(),
       ]);
@@ -158,7 +160,12 @@ export default function CarreiraPage() {
 
   const nome = config?.nome_marca?.trim() || cliente?.nome_empresa || "Empresa";
   const heroTextColor = config?.carreira_texto_cor?.trim() || (heroTextColorAuto === "dark" ? "#1f2937" : "#ffffff");
-  const wa = waDigits(cliente?.whatsapp);
+  const wa = useMemo(() => {
+    const w = config?.contato_whatsapp?.trim();
+    if (w) return waDigits(w);
+    const t = config?.contato_telefone?.trim();
+    return t ? waDigits(t) : "";
+  }, [config?.contato_whatsapp, config?.contato_telefone]);
   const filtered = vagas.filter((v) => {
     if (cidadeFiltro && (cliente?.cidade?.trim() ?? "") !== cidadeFiltro) return false;
     if (!busca.trim()) return true;
@@ -314,8 +321,8 @@ export default function CarreiraPage() {
               </div>
               <div className="career-job-body open">
                 {v.descricao ? <div className="career-job-desc">{v.descricao}</div> : null}
-                <div onClick={(e) => e.stopPropagation()}>
-                  {wa ? (
+                {wa ? (
+                  <div onClick={(e) => e.stopPropagation()}>
                     <a
                       href={`https://wa.me/${wa}?text=${encodeURIComponent(`Olá, quero me candidatar para ${vagaTituloPublico(v)}`)}`}
                       target="_blank"
@@ -325,12 +332,8 @@ export default function CarreiraPage() {
                     >
                       Candidatar-se via WhatsApp
                     </a>
-                  ) : (
-                    <div className="fs13 muted" style={{ marginTop: 14 }}>
-                      Configure o WhatsApp do cliente
-                    </div>
-                  )}
-                </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           );
