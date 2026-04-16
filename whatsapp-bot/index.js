@@ -73,14 +73,12 @@ function extractKapsoInbound(req) {
   const payload = req.body;
   const headerEvent = req.headers["x-webhook-event"];
   const bodyEvent = payload?.event;
+
   if (headerEvent !== "whatsapp.message.received" && bodyEvent !== "whatsapp.message.received") {
     return { skip: true, reason: "wrong_event" };
   }
 
-  const data = payload?.data;
-  if (!data) return { skip: true, reason: "no_data" };
-
-  const msg = data.message;
+  const msg = payload?.message;
   if (!msg) return { skip: true, reason: "no_message" };
 
   if (msg.kapso?.direction !== "inbound") {
@@ -91,9 +89,10 @@ function extractKapsoInbound(req) {
     return { skip: true, reason: "not_text" };
   }
 
-  const conversationId = data.conversation?.id;
+  const conversationId = payload?.conversation?.id;
   const from = msg.from;
   const text = String(msg.text.body).trim();
+  const phoneNumberId = payload?.conversation?.phone_number_id || payload?.phone_number_id;
 
   if (!conversationId || !from || !text) {
     return { skip: true, reason: "missing_fields" };
@@ -104,7 +103,7 @@ function extractKapsoInbound(req) {
     conversationId,
     to: normalizeE164Digits(from),
     text,
-    phoneNumberId: data.phone_number_id,
+    phoneNumberId,
   };
 }
 
