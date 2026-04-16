@@ -6,12 +6,7 @@ const Anthropic = require("@anthropic-ai/sdk");
 dotenv.config();
 
 const PORT = Number(process.env.PORT || 3333);
-const KAPSO_API_KEY = process.env.KAPSO_API_KEY || "";
 const KAPSO_PHONE_NUMBER_ID = process.env.KAPSO_PHONE_NUMBER_ID || "";
-
-function getKapsoSendUrl() {
-  return `https://api.kapso.ai/platform/v1/whatsapp/phone_numbers/${process.env.KAPSO_PHONE_NUMBER_ID}/messages`;
-}
 
 const MAX_HISTORY_MESSAGES = 20;
 
@@ -154,31 +149,36 @@ async function saveConversationHistory(conversationId, messages) {
 }
 
 async function sendWhatsAppMessage(toDigits, message) {
-  if (!KAPSO_API_KEY || !KAPSO_PHONE_NUMBER_ID) {
+  const phoneNumberId = process.env.KAPSO_PHONE_NUMBER_ID;
+  const apiKey = process.env.KAPSO_API_KEY;
+
+  if (!apiKey || !phoneNumberId) {
     console.error("[kapso] KAPSO_API_KEY ou KAPSO_PHONE_NUMBER_ID não configurados");
     return;
   }
 
+  const url = `https://api.kapso.ai/meta/whatsapp/${phoneNumberId}/messages`;
+  const body = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: toDigits,
+    type: "text",
+    text: { body: message },
+  };
+
+  console.log("[kapso] enviando para URL:", url);
+  console.log("[kapso] body:", JSON.stringify(body));
+
   try {
-    const url = getKapsoSendUrl();
-    console.log("[kapso] URL de envio:", url);
-    await axios.post(
-      url,
-      {
-        to: toDigits,
-        type: "text",
-        text: { body: message },
+    const response = await axios.post(url, body, {
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey,
       },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": KAPSO_API_KEY,
-        },
-      }
-    );
-    console.log(`[kapso] mensagem enviada para ${toDigits}`);
+    });
+    console.log("[kapso] mensagem enviada, status:", response.status);
   } catch (err) {
-    console.error("[kapso] erro ao enviar:", JSON.stringify(err?.response?.data, null, 2) || err?.message);
+    console.error("[kapso] erro ao enviar:", err?.response?.status, JSON.stringify(err?.response?.data));
   }
 }
 
