@@ -8,7 +8,10 @@ dotenv.config();
 const PORT = Number(process.env.PORT || 3333);
 const KAPSO_API_KEY = process.env.KAPSO_API_KEY || "";
 const KAPSO_PHONE_NUMBER_ID = process.env.KAPSO_PHONE_NUMBER_ID || "";
-const KAPSO_SEND_URL = `https://api.kapso.ai/platform/v1/whatsapp/phone_numbers/${KAPSO_PHONE_NUMBER_ID}/messages`;
+
+function getKapsoSendUrl() {
+  return `https://api.kapso.ai/platform/v1/whatsapp/phone_numbers/${process.env.KAPSO_PHONE_NUMBER_ID}/messages`;
+}
 
 const MAX_HISTORY_MESSAGES = 20;
 
@@ -157,8 +160,10 @@ async function sendWhatsAppMessage(toDigits, message) {
   }
 
   try {
+    const url = getKapsoSendUrl();
+    console.log("[kapso] URL de envio:", url);
     await axios.post(
-      KAPSO_SEND_URL,
+      url,
       {
         to: toDigits,
         type: "text",
