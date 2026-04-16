@@ -225,6 +225,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.post("/webhook", async (req, res) => {
+  console.log("[webhook] payload recebido:", JSON.stringify(req.body, null, 2));
   try {
     if (!consumeIdempotencyKey(req, res)) return;
 
