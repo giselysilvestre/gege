@@ -157,10 +157,8 @@ async function sendWhatsAppMessage(toDigits, message) {
     return;
   }
 
-  const url = `https://api.kapso.ai/meta/whatsapp/${phoneNumberId}/messages`;
+  const url = `https://api.kapso.ai/platform/v1/whatsapp/phone_numbers/${phoneNumberId}/messages`;
   const body = {
-    messaging_product: "whatsapp",
-    recipient_type: "individual",
     to: toDigits,
     type: "text",
     text: { body: message },
