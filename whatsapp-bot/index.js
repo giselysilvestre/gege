@@ -3,7 +3,12 @@ const axios = require("axios");
 const dotenv = require("dotenv");
 const { createClient } = require("@supabase/supabase-js");
 const Anthropic = require("@anthropic-ai/sdk");
+const { WhatsAppClient } = require("@kapso/whatsapp-cloud-api");
+const pdfParse = require("pdf-parse");
+const Groq = require("groq-sdk");
 dotenv.config();
+
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const PORT = Number(process.env.PORT || 3333);
 const KAPSO_PHONE_NUMBER_ID = process.env.KAPSO_PHONE_NUMBER_ID || "";
@@ -16,6 +21,7 @@ app.use(express.json({ limit: "2mb" }));
 /** Dedupe de retries do Kapso via header X-Idempotency-Key */
 const processedIdempotencyKeys = new Set();
 const IDEMPOTENCY_CACHE_MAX = 5000;
+const pendingMessages = new Map();
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -27,42 +33,147 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || "",
 });
 
-const SYSTEM_PROMPT = `Você é a Gê, recrutadora virtual da Gegê – plataforma de recrutamento para food service.
+const kapsoClient = new WhatsAppClient({
+  baseUrl: "https://api.kapso.ai/meta/whatsapp",
+  kapsoApiKey: process.env.KAPSO_API_KEY,
+});
 
-Seu trabalho é conduzir o processo de triagem de candidatos via WhatsApp de forma amigável, direta e acolhedora. Frases curtas. Tom humano, nunca robótico. Nunca diga que é uma IA.
+const SYSTEM_PROMPT = `## PAPEL E OBJETIVO
 
-FLUXO DA CONVERSA – siga rigorosamente esta sequência:
+Você é a Ana, recrutadora da Gegê — plataforma de recrutamento para food service.
+Seu objetivo é conduzir a triagem de candidatos via WhatsApp, entender o perfil de cada pessoa e identificar vagas compatíveis com ela.
+Você não toma decisão de contratação. Você qualifica e apresenta vagas.
 
-ETAPA 1 – BOAS-VINDAS
-Quando o candidato mandar qualquer mensagem inicial, responda:
-"Oi! Tudo bem? Sou a Gê 🙂 Estou aqui para te ajudar com sua candidatura. Antes de continuar, me confirma: você tem interesse em trabalhar na área de alimentação/food service?"
+## CONTRATO DE SAÍDA
 
-ETAPA 2 – COLETA DE DADOS (um dado por vez)
-Se confirmou interesse, colete em ordem:
-1. Nome completo
-2. CPF (diga que é só para identificação e fica guardado com segurança)
-3. CEP
-4. Escolaridade (ofereça opções: Ensino Médio completo, Ensino Médio incompleto, Superior completo, Superior incompleto)
+Sua resposta final é apenas o texto que vai para o WhatsApp do candidato.
+Não escreva análise, observação, tag, cabeçalho, markdown, JSON ou instruções internas na mensagem.
+Máximo 2 parágrafos por mensagem.
+Nunca mande duas perguntas na mesma mensagem.
 
-ETAPA 3 – CURRÍCULO
-Peça o currículo: "Agora me manda seu currículo? Pode ser PDF, Word ou foto. Se não tiver, me conta seu último emprego e o que você fazia lá."
+## PRIORIDADE DE REGRAS
 
-ETAPA 4 – SCREENING
-Faça as perguntas uma a uma:
-1. Situação atual: empregado, desempregado ou em período de experiência?
-2. Quando poderia começar: imediatamente, em 1 semana, em 2 semanas ou mais?
-3. Tem disponibilidade para trabalhar em escala 6x1?
+Se houver conflito, siga esta ordem:
+1. Nunca pule etapas
+2. Nunca mande duas perguntas na mesma mensagem
+3. Máquina de estados da conversa
+4. Objetivo de qualificar o candidato
+5. Estilo e tom de comunicação
 
-ETAPA 5 – ENCERRAMENTO
-Após coletar tudo, diga:
-"Perfeito! Recebi tudo. Vou analisar seu perfil e, se houver uma vaga compatível, entro em contato em breve. Fique de olho aqui no WhatsApp! 🙂"
+## REGRAS DE FORMATO OBRIGATÓRIAS
 
-REGRAS IMPORTANTES:
-- Nunca pule etapas
-- Se o candidato mandar algo fora do contexto, reconheça brevemente e volte para a pergunta pendente
-- Se o candidato não quiser continuar, agradeça e encerre com gentileza
-- Máximo 2 parágrafos por mensagem
-- Use emojis com moderação`;
+Frases curtas.
+Use emojis raramente — só quando fizer sentido, nunca mais de um por mensagem.
+Nunca diga que é uma IA, a não ser que seja perguntado diretamente.
+Espelhe o nível de formalidade do candidato.
+Se o candidato mandar áudio, trate a transcrição como texto normal e continue o fluxo.
+Sempre responda em português brasileiro, independente do idioma que o candidato usar.
+Escreva tudo em letras minúsculas, como numa conversa informal de WhatsApp. Não capitalize início de frase, nomes próprios ou nada. A única exceção é a sigla CEP, nomes, ou 1 frase foi msg.
+Nunca use hífen, travessão ou qualquer símbolo de pontuação para separar ideias. Use vírgula ou ponto.
+
+## DADOS DO CANDIDATO
+
+Você recebe estes dados antes de cada conversa. Use-os — não pergunte o que já sabe.
+
+Nome: {{nome}}
+Cargo principal: {{cargo_principal}}
+Cidade: {{cidade}}
+Situação de emprego: {{situacao_emprego}}
+Última experiência: {{ultima_experiencia}}
+Disponibilidade de horário: {{disponibilidade_horario}}
+Fit food service: {{fit_food_service}}
+Score IA: {{score_ia}}
+Tags: {{tags}}
+
+Se um campo estiver como "não informado", você pode coletar durante a conversa.
+
+## MÁQUINA DE ESTADOS
+
+Estados válidos:
+abertura
+confirmacao_perfil
+mini_entrevista
+encerramento
+apresentacao_vaga
+confirmacao_localizacao
+encerrado
+
+Objetivo por estado:
+abertura — confirmar interesse e coletar nome se não tiver
+confirmacao_perfil — confirmar cargo e situação de emprego atual
+mini_entrevista — conduzir as 5 perguntas uma por vez
+encerramento — agradecer e avisar que vai mandar vaga quando tiver
+apresentacao_vaga — apresentar vaga e confirmar interesse
+confirmacao_localizacao — confirmar proximidade e coletar CEP
+encerrado — candidato sem interesse ou sem resposta após follow-ups
+
+Transições:
+Se candidato disser que não tem interesse em qualquer momento, ir para encerrado.
+Se candidato não responder, aguardar — o sistema de follow-up cuida disso.
+Não voltar para etapa anterior se a conversa já avançou.
+
+## ALGORITMO DE RESPOSTA POR TURNO
+
+1. Leia o histórico completo da conversa.
+2. Identifique em qual estado está.
+3. Identifique o que o candidato disse ou perguntou.
+4. Componha a próxima mensagem seguindo o estado atual.
+5. Valide o checklist antes de enviar.
+
+## FLUXO DA CONVERSA
+
+ESTADO: abertura
+Quando o candidato responder ao disparo inicial:
+Se não tiver nome na base: "Que bom que respondeu! Me confirma seu nome completo?"
+Se tiver nome: "Boa, {{nome}}! Então vou entender melhor o seu perfil e sempre que tiver vagas compatíveis, te mando por aqui. Só pra confirmar — seu interesse é em vagas de {{cargo_principal}} em restaurantes e lanchonetes, certo?"
+
+ESTADO: confirmacao_perfil
+"E como você está hoje — já está trabalhando?"
+
+ESTADO: mini_entrevista
+"Pra não tomar muito do seu tempo, pensei em fazer assim: ao invés de marcar uma entrevista, vou te mandar algumas perguntinhas por aqui, como se fosse uma conversa. Você pode responder com áudio de até 1 minuto ou texto, como preferir. A ideia é te conhecer melhor pra indicar nas vagas certas. Podemos fazer assim?"
+
+Se confirmar, faça uma pergunta por vez esperando a resposta antes de mandar a próxima:
+
+Pergunta 1: "Me conta sobre seu último emprego — como foi trabalhar lá e por que você saiu?"
+Pergunta 2: "Como você lida com imprevistos no trabalho — atrasos, faltas, aquelas situações que aparecem do nada? Me dá um exemplo se tiver."
+Pergunta 3: "Já teve alguma situação no trabalho que você não concordou com algo? Como você lidou?"
+Pergunta 4: "Como está sua disponibilidade de horário e de escala? Tem alguma restrição?"
+Pergunta 5: "Me fala um pouco sobre você — mora com quem? Tem filhos? O que gosta de fazer?"
+
+ESTADO: encerramento
+"Gostou dessa entrevista por WhatsApp? kkkk Muito obrigada por responder tudo! Assim que tiver uma vaga compatível, te mando por aqui."
+
+ESTADO: apresentacao_vaga
+"Achei uma vaga compatível com você!
+
+É para a [nome_restaurante], [descricao_curta].
+
+Detalhes da oportunidade de [cargo]:
+Salário: R$ [salario]
+Meta de Vendas: até R$ [meta]
+Vale Alimentação: R$ [va]
+Vale Transporte
+Endereço: [endereco]
+Escala: [escala] ([horario])
+
+Tem interesse?"
+
+ESTADO: confirmacao_localizacao
+"Você viu o endereço? Fica em [bairro] — é perto de você?"
+Se confirmar: "Me confirma seu CEP atual? Quero garantir que está atualizado."
+
+ESTADO: encerrado
+Se sem interesse: "Tudo bem! Fico à disposição se surgir algo no futuro. Até mais!"
+Se opt-out: "Claro, sem problema. Não vou mais te contactar. Boa sorte!"
+
+## CHECKLIST FINAL ANTES DE ENVIAR
+
+A mensagem tem no máximo 2 parágrafos.
+Tem no máximo uma pergunta.
+Não tem metacomentário, análise ou instrução interna.
+Não inventa dados que não estão no contexto.
+Avança a conversa para o próximo estado.`;
 
 /**
  * Extrai dados do webhook Kapso v2 (event whatsapp.message.received).
@@ -84,7 +195,21 @@ function extractKapsoInbound(req) {
   }
 
   if (msg.type !== "text" || !msg.text?.body) {
-    return { skip: true, reason: "not_text" };
+    const tiposSuportados = ["audio", "document"];
+    if (tiposSuportados.includes(msg.type) && msg.kapso?.has_media) {
+      return {
+        skip: false,
+        from: msg.from,
+        to: normalizeE164Digits(msg.from),
+        text: null,
+        type: msg.type,
+        msg,
+        conversationId: payload?.conversation?.id,
+        phoneNumberId: payload?.conversation?.phone_number_id || payload?.phone_number_id,
+      };
+    }
+    console.log("[webhook] mensagem não-texto recebida:", JSON.stringify(msg, null, 2));
+    return { skip: true, reason: "not_supported" };
   }
 
   const conversationId = payload?.conversation?.id;
@@ -109,41 +234,127 @@ function normalizeE164Digits(phone) {
   return String(phone).replace(/\D/g, "");
 }
 
-async function loadConversationHistory(conversationId) {
+function buildPhoneLookupVariants(phoneDigits) {
+  const onlyDigits = normalizeE164Digits(phoneDigits);
+  const variants = new Set([onlyDigits, `+${onlyDigits}`]);
+  if (onlyDigits.startsWith("55")) {
+    const local = onlyDigits.slice(2);
+    if (local) {
+      variants.add(local);
+      variants.add(`+55${local}`);
+    }
+  }
+  return Array.from(variants).filter(Boolean);
+}
+
+async function resolveCandidatoIdByPhone(phoneDigits) {
+  const phoneVariants = buildPhoneLookupVariants(phoneDigits);
   const { data, error } = await supabase
-    .from("conversation_history")
-    .select("messages")
-    .eq("conversation_id", conversationId)
+    .from("candidatos")
+    .select("id,telefone")
+    .in("telefone", phoneVariants)
+    .limit(1);
+
+  if (error) {
+    console.error("[supabase] erro ao buscar candidato por telefone:", error);
+    throw error;
+  }
+
+  const candidate = (data || [])[0];
+  if (candidate?.id) return candidate.id;
+
+  const canonicalPhone = phoneVariants[0] || normalizeE164Digits(phoneDigits);
+  const { data: created, error: createError } = await supabase
+    .from("candidatos")
+    .insert({
+      nome: `Candidato WhatsApp ${canonicalPhone}`,
+      telefone: canonicalPhone,
+      origem: "whatsapp",
+    })
+    .select("id")
+    .single();
+
+  if (createError) {
+    console.error("[supabase] erro ao criar candidato automático:", createError);
+    throw createError;
+  }
+  return created.id;
+}
+
+async function getOrCreateActiveSession(candidatoId) {
+  const { data: existing, error: existingError } = await supabase
+    .from("whatsapp_sessoes")
+    .select("id")
+    .eq("candidato_id", candidatoId)
+    .eq("status", "ativo")
+    .order("primeiro_contato_at", { ascending: true })
+    .limit(1)
     .maybeSingle();
+
+  if (existingError) {
+    console.error("[supabase] erro ao buscar sessão ativa:", existingError);
+    throw existingError;
+  }
+
+  if (existing?.id) return existing.id;
+
+  const nowIso = new Date().toISOString();
+  const { data: created, error: createError } = await supabase
+    .from("whatsapp_sessoes")
+    .insert({
+      candidato_id: candidatoId,
+      status: "ativo",
+      primeiro_contato_at: nowIso,
+    })
+    .select("id")
+    .single();
+
+  if (createError) {
+    console.error("[supabase] erro ao criar sessão ativa:", createError);
+    throw createError;
+  }
+
+  return created.id;
+}
+
+async function loadConversationHistory(candidatoId) {
+  const { data, error } = await supabase
+    .from("whatsapp_eventos")
+    .select("direcao,conteudo")
+    .eq("candidato_id", candidatoId)
+    .order("criado_em", { ascending: true });
 
   if (error) {
     console.error("[supabase] erro ao carregar histórico:", error);
     return [];
   }
 
-  const raw = data?.messages;
-  if (!Array.isArray(raw)) return [];
+  const mapped = (data || [])
+    .map((event) => {
+      const role = event.direcao === "inbound" ? "user" : "assistant";
+      const content = typeof event.conteudo === "string" ? event.conteudo : "";
+      return { role, content };
+    })
+    .filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string");
 
-  return raw.filter(
-    (m) =>
-      m &&
-      (m.role === "user" || m.role === "assistant") &&
-      typeof m.content === "string"
-  );
+  if (mapped.length > MAX_HISTORY_MESSAGES) {
+    return mapped.slice(mapped.length - MAX_HISTORY_MESSAGES);
+  }
+  return mapped;
 }
 
-async function saveConversationHistory(conversationId, messages) {
-  const { error } = await supabase.from("conversation_history").upsert(
-    {
-      conversation_id: conversationId,
-      messages,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "conversation_id" }
-  );
+async function saveMessageEvent({ sessaoId, candidatoId, direcao, conteudo }) {
+  const { error } = await supabase.from("whatsapp_eventos").insert({
+    sessao_id: sessaoId,
+    candidato_id: candidatoId,
+    direcao,
+    tipo_midia: "texto",
+    conteudo,
+    criado_em: new Date().toISOString(),
+  });
 
   if (error) {
-    console.error("[supabase] erro ao salvar histórico:", error);
+    console.error("[supabase] erro ao salvar evento:", error);
     throw error;
   }
 }
@@ -182,27 +393,104 @@ async function sendWhatsAppMessage(toDigits, message) {
   }
 }
 
-async function getGeResponse(conversationId, userMessage) {
-  const history = await loadConversationHistory(conversationId);
+async function sendKapsoMessage(toDigits, message) {
+  await sendWhatsAppMessage(toDigits, message);
+}
+
+async function processarMidia(msg, phoneNumberId) {
+  try {
+    const tipo = msg.type;
+    const mediaId = msg.audio?.id || msg.document?.id || msg.image?.id;
+    if (!mediaId) return null;
+
+    const bytes = await kapsoClient.media.download({
+      mediaId,
+      phoneNumberId,
+    });
+
+    const buffer = Buffer.from(bytes);
+
+    if (tipo === "audio") {
+      const transcricao = await groq.audio.transcriptions.create({
+        file: new File([buffer], "audio.ogg", { type: "audio/ogg" }),
+        model: "whisper-large-v3",
+        language: "pt",
+        response_format: "text",
+      });
+      return `[áudio transcrito]: ${transcricao}`;
+    }
+
+    if (tipo === "document" && msg.document?.mime_type === "application/pdf") {
+      const parsed = await pdfParse(buffer);
+      return `[currículo recebido]: ${parsed.text.slice(0, 3000)}`;
+    }
+
+    return null;
+  } catch (err) {
+    console.error("[processarMidia] erro:", err);
+    return null;
+  }
+}
+
+async function getGeResponse(candidatoId, userMessage) {
+  const sessaoId = await getOrCreateActiveSession(candidatoId);
+  const history = await loadConversationHistory(candidatoId);
+
+  await saveMessageEvent({
+    sessaoId,
+    candidatoId,
+    direcao: "inbound",
+    conteudo: userMessage,
+  });
 
   history.push({ role: "user", content: userMessage });
+
+  let candidato = null;
+  let analise = null;
+
+  try {
+    const { data: cand } = await supabase
+      .from("candidatos")
+      .select("nome, cargo_principal, cidade, bairro, cep, situacao_emprego, status_disponibilidade")
+      .eq("id", candidatoId)
+      .single();
+    candidato = cand;
+
+    const { data: anal } = await supabase
+      .from("candidatos_analise")
+      .select("score_ia, tags, fit_food_service, ultima_experiencia, disponibilidade_horario")
+      .eq("candidato_id", candidatoId)
+      .single();
+    analise = anal;
+  } catch (err) {
+    console.error("[getGeResponse] erro ao buscar dados do candidato:", err);
+  }
+
+  const systemPromptDinamico = SYSTEM_PROMPT
+    .replace("{{nome}}", candidato?.nome || "não informado")
+    .replace("{{cargo_principal}}", candidato?.cargo_principal || "não informado")
+    .replace("{{cidade}}", candidato?.cidade || "não informada")
+    .replace("{{situacao_emprego}}", candidato?.situacao_emprego || "não informada")
+    .replace("{{score_ia}}", analise?.score_ia?.toString() || "não calculado")
+    .replace("{{tags}}", analise?.tags?.join(", ") || "nenhuma")
+    .replace("{{fit_food_service}}", analise?.fit_food_service || "não avaliado")
+    .replace("{{ultima_experiencia}}", analise?.ultima_experiencia || "não informada")
+    .replace("{{disponibilidade_horario}}", analise?.disponibilidade_horario || "não informada");
 
   const response = await anthropic.messages.create({
     model: process.env.CLAUDE_MODEL || "claude-3-5-sonnet-latest",
     max_tokens: 1024,
-    system: SYSTEM_PROMPT,
+    system: systemPromptDinamico,
     messages: history,
   });
 
   const assistantMessage = response.content[0].text;
-
-  history.push({ role: "assistant", content: assistantMessage });
-
-  if (history.length > MAX_HISTORY_MESSAGES) {
-    history.splice(0, history.length - MAX_HISTORY_MESSAGES);
-  }
-
-  await saveConversationHistory(conversationId, history);
+  await saveMessageEvent({
+    sessaoId,
+    candidatoId,
+    direcao: "outbound",
+    conteudo: assistantMessage,
+  });
 
   return assistantMessage;
 }
@@ -229,16 +517,27 @@ app.get("/health", (_req, res) => {
 });
 
 app.post("/webhook", async (req, res) => {
-  console.log("[webhook] payload recebido:", JSON.stringify(req.body, null, 2));
   try {
+    console.log("[webhook] payload recebido:", JSON.stringify(req.body, null, 2));
     if (!consumeIdempotencyKey(req, res)) return;
+    const messageId = req.body?.message?.id;
+    if (messageId) {
+      if (processedIdempotencyKeys.has(messageId)) {
+        console.log("[webhook] duplicata ignorada (message.id):", messageId);
+        return res.status(200).json({ ok: true, duplicate: true });
+      }
+      processedIdempotencyKeys.add(messageId);
+      if (processedIdempotencyKeys.size > IDEMPOTENCY_CACHE_MAX) {
+        processedIdempotencyKeys.clear();
+      }
+    }
 
     const extracted = extractKapsoInbound(req);
     if (extracted.skip) {
       return res.status(200).json({ ok: true, skipped: extracted.reason });
     }
 
-    const { conversationId, to, text, phoneNumberId } = extracted;
+    const { conversationId, to, text, phoneNumberId, type, msg } = extracted;
 
     if (
       KAPSO_PHONE_NUMBER_ID &&
@@ -256,16 +555,40 @@ app.post("/webhook", async (req, res) => {
     console.log("[webhook] payload bruto:", JSON.stringify(req.body, null, 2));
     console.log(`[webhook] conversa ${conversationId} de ${to}: ${text}`);
 
-    const resposta = await getGeResponse(conversationId, text);
+    const candidatoId = await resolveCandidatoIdByPhone(to);
+    let textoFinal = text;
 
-    console.log(`[webhook] resposta da Gê: ${resposta}`);
+    if (!textoFinal && (type === "audio" || type === "document")) {
+      textoFinal = await processarMidia(msg, phoneNumberId);
+      if (!textoFinal) {
+        await sendKapsoMessage(to, "não consegui processar esse arquivo. pode mandar em texto ou tentar de novo?");
+        return res.status(200).json({ ok: true });
+      }
+    }
 
-    await sendWhatsAppMessage(to, resposta);
+    const chave = to;
+    if (pendingMessages.has(chave)) {
+      clearTimeout(pendingMessages.get(chave).timer);
+      pendingMessages.get(chave).texts.push(textoFinal);
+    } else {
+      pendingMessages.set(chave, { texts: [textoFinal], timer: null });
+    }
+
+    pendingMessages.get(chave).timer = setTimeout(async () => {
+      const textoAgregado = pendingMessages.get(chave).texts.join(" ");
+      pendingMessages.delete(chave);
+      try {
+        const resposta = await getGeResponse(candidatoId, textoAgregado);
+        await sendKapsoMessage(to, resposta);
+      } catch (err) {
+        console.error("[webhook] erro ao processar mensagem agregada:", err);
+      }
+    }, 3000);
 
     return res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error("[webhook] erro:", error);
-    return res.status(500).json({ ok: false, error: "internal_error" });
+  } catch (err) {
+    console.error("[webhook] ERRO NÃO CAPTURADO:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
