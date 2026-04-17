@@ -203,7 +203,7 @@ function extractKapsoInbound(req) {
   }
 
   if (msg.type !== "text" || !msg.text?.body) {
-    const tiposSuportados = ["audio", "document"];
+    const tiposSuportados = ["audio", "document", "image"];
     if (tiposSuportados.includes(msg.type) && msg.kapso?.has_media) {
       return {
         skip: false,
@@ -443,6 +443,48 @@ async function processarMidia(msg, phoneNumberId, candidatoId) {
         return `[currículo processado]: cargo principal: ${cargo}. última experiência: ${ultimaExp}`;
       }
       return `[currículo recebido]: ${cvText}`;
+    }
+
+    if (tipo === "image") {
+      const base64 = buffer.toString("base64");
+      const mimeType = msg.image?.mime_type || "image/jpeg";
+
+      const response = await anthropic.messages.create({
+        model: process.env.CLAUDE_MODEL || "claude-3-5-sonnet-latest",
+        max_tokens: 2000,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: mimeType,
+                  data: base64,
+                },
+              },
+              {
+                type: "text",
+                text: "Esta é uma imagem de um currículo. Extraia todo o texto visível e retorne apenas o texto extraído, sem comentários.",
+              },
+            ],
+          },
+        ],
+      });
+
+      const textOut = (response.content || [])
+        .filter((c) => c.type === "text")
+        .map((c) => c.text)
+        .join("\n");
+      const cvText = textOut;
+      const dados = await processarCV(cvText, candidatoId);
+      if (dados) {
+        const cargo = dados.candidato.cargo_principal || "não identificado";
+        const ultimaExp = dados.analise.ultima_experiencia || "não identificada";
+        return `[currículo processado]: cargo principal: ${cargo}. última experiência: ${ultimaExp}`;
+      }
+      return `[imagem de currículo recebida]: ${cvText.slice(0, 500)}`;
     }
 
     return null;
@@ -700,7 +742,7 @@ app.post("/webhook", async (req, res) => {
     const candidatoId = await resolveCandidatoIdByPhone(to);
     let textoFinal = text;
 
-    if (!textoFinal && (type === "audio" || type === "document")) {
+    if (!textoFinal && (type === "audio" || type === "document" || type === "image")) {
       textoFinal = await processarMidia(msg, phoneNumberId, candidatoId);
       if (!textoFinal) {
         await sendKapsoMessage(to, "não consegui processar esse arquivo. pode mandar em texto ou tentar de novo?");
