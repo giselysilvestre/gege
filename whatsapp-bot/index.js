@@ -403,12 +403,17 @@ async function processarMidia(msg, phoneNumberId) {
     const mediaId = msg.audio?.id || msg.document?.id || msg.image?.id;
     if (!mediaId) return null;
 
+    console.log("[processarMidia] mediaId:", mediaId, "tipo:", tipo);
     const bytes = await kapsoClient.media.download({
       mediaId,
       phoneNumberId,
     });
-
+    console.log(
+      "[processarMidia] bytes recebidos:",
+      bytes?.byteLength || bytes?.length || typeof bytes
+    );
     const buffer = Buffer.from(bytes);
+    console.log("[processarMidia] buffer size:", buffer.length);
 
     if (tipo === "audio") {
       const transcricao = await groq.audio.transcriptions.create({
