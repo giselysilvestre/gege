@@ -4,7 +4,7 @@ const dotenv = require("dotenv");
 const { createClient } = require("@supabase/supabase-js");
 const Anthropic = require("@anthropic-ai/sdk");
 const { WhatsAppClient } = require("@kapso/whatsapp-cloud-api");
-const pdfParse = require("pdf-parse");
+const pdfParse = require("pdf-parse/lib/pdf-parse.js");
 const Groq = require("groq-sdk");
 dotenv.config();
 
