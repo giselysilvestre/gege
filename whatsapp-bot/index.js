@@ -73,6 +73,14 @@ Nunca use hífen, travessão ou qualquer símbolo de pontuação para separar id
 
 ## DADOS DO CANDIDATO
 
+## REGRAS DE COLETA DE INFORMAÇÃO
+
+O roteiro é um guia do que precisa ser coletado, não uma sequência rígida.
+Se o candidato mencionar espontaneamente qualquer informação do roteiro — último emprego, disponibilidade, situação atual, família — absorve e considera como respondido. Não repete a pergunta.
+Quando receber [currículo processado], confirma brevemente o que entendeu: "vi que você trabalhou como [cargo] na [empresa], é isso mesmo?" e continua o roteiro pulando o que o CV já respondeu.
+Quando receber [áudio transcrito], processa o conteúdo normalmente como se fosse texto.
+Nunca diz ao candidato que está "registrando" ou "salvando" informações.
+
 Você recebe estes dados antes de cada conversa. Use-os — não pergunte o que já sabe.
 
 Nome: {{nome}}
@@ -397,7 +405,7 @@ async function sendKapsoMessage(toDigits, message) {
   await sendWhatsAppMessage(toDigits, message);
 }
 
-async function processarMidia(msg, phoneNumberId) {
+async function processarMidia(msg, phoneNumberId, candidatoId) {
   try {
     const tipo = msg.type;
     const mediaId = msg.audio?.id || msg.document?.id || msg.image?.id;
@@ -427,12 +435,141 @@ async function processarMidia(msg, phoneNumberId) {
 
     if (tipo === "document" && msg.document?.mime_type === "application/pdf") {
       const parsed = await pdfParse(buffer);
-      return `[currículo recebido]: ${parsed.text.slice(0, 3000)}`;
+      const cvText = parsed.text.slice(0, 3000);
+      const dados = await processarCV(cvText, candidatoId);
+      if (dados) {
+        const cargo = dados.candidato.cargo_principal || "não identificado";
+        const ultimaExp = dados.analise.ultima_experiencia || "não identificada";
+        return `[currículo processado]: cargo principal: ${cargo}. última experiência: ${ultimaExp}`;
+      }
+      return `[currículo recebido]: ${cvText}`;
     }
 
     return null;
   } catch (err) {
     console.error("[processarMidia] erro:", err);
+    return null;
+  }
+}
+
+async function processarCV(cvText, candidatoId) {
+  const hoje = new Date().toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  const prompt = `A data de hoje é ${hoje}. Use como referência absoluta para calcular durações, identificar empregos atuais e avaliar se datas são passadas ou futuras.
+Você é recrutador sênior em food service. Retorne APENAS JSON válido, sem markdown.
+{
+  "candidato": {
+    "nome": "Capitalizar cada palavra exceto preposições (da, de, do, dos, das, e)",
+    "cargo_principal": "cargo do último emprego ou null",
+    "cidade": "apenas se explícito ou null",
+    "bairro": "apenas se explícito ou null",
+    "cep": "formato 00000-000, apenas se explícito, não inferir, ou null",
+    "escolaridade": "nível mais alto concluído ou em andamento ou null",
+    "genero": "Masculino | Feminino | Não informado (inferir pelo primeiro nome)",
+    "data_nascimento": "YYYY-MM-DD se explícito, não inferir, ou null",
+    "situacao_emprego": "Empregado se último emprego sem data de fim OU texto contém 'atual', 'atualmente', 'presente'. Desempregado se último emprego tem data de fim anterior a hoje. null se não inferível."
+  },
+  "experiencias": [
+    {
+      "empresa": "nome da empresa",
+      "cargo": "cargo exercido ou null",
+      "setor": "alimentacao | cozinha | atendimento | lideranca | outro",
+      "data_inicio": "YYYY-MM-DD ou null",
+      "data_fim": "YYYY-MM-DD ou null se emprego atual",
+      "meses": "calcular pelas datas usando hoje como referência para empregos sem data_fim",
+      "eh_lideranca": "true só se cargo envolve gestão direta de pessoas com evidência no texto",
+      "crescimento_interno": "true só se houve mudança de cargo com escopo crescente na mesma empresa"
+    }
+  ],
+  "analise": {
+    "perfil_resumo": "cargo predominante + tempo total de experiência relevante em food service",
+    "pontos_fortes": "texto corrido, apenas evidências rastreáveis no CV, null se nenhuma",
+    "red_flags": "texto corrido, fatos concretos com trecho literal entre aspas, null se nenhum",
+    "fit_food_service": "Alto | Médio | Baixo",
+    "analise_completa": "[Nome] é [cargo] com [tempo]. O que chama atenção: [fato]. O que preocupa: [fato]. Recomendação: Chamar para triagem | Triagem com ressalva | Não priorizar — [fator decisivo].",
+    "score_ia": "0-100. Experiência direta food service com permanência (40%), estabilidade vínculos (30%), evidências comportamentais (30%)",
+    "ultima_experiencia": "Empresa — cargo, duração"
+  }
+}
+CV:
+"""${cvText}"""`;
+
+  try {
+    const msg = await anthropic.messages.create({
+      model: process.env.CLAUDE_MODEL || "claude-3-5-sonnet-latest",
+      max_tokens: 2000,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const textOut = (msg.content || [])
+      .filter((c) => c.type === "text")
+      .map((c) => c.text)
+      .join("\n");
+    const raw = textOut.replace(/```json|```/g, "").trim();
+    const dados = JSON.parse(raw);
+
+    const updateCandidato = {};
+    if (dados.candidato.nome) updateCandidato.nome = dados.candidato.nome;
+    if (dados.candidato.cargo_principal) updateCandidato.cargo_principal = dados.candidato.cargo_principal;
+    if (dados.candidato.cidade) updateCandidato.cidade = dados.candidato.cidade;
+    if (dados.candidato.bairro) updateCandidato.bairro = dados.candidato.bairro;
+    if (dados.candidato.cep) updateCandidato.cep = dados.candidato.cep;
+    if (dados.candidato.escolaridade) updateCandidato.escolaridade = dados.candidato.escolaridade;
+    if (dados.candidato.genero) updateCandidato.genero = dados.candidato.genero;
+    if (dados.candidato.data_nascimento) updateCandidato.data_nascimento = dados.candidato.data_nascimento;
+    if (dados.candidato.situacao_emprego) updateCandidato.situacao_emprego = dados.candidato.situacao_emprego;
+
+    if (Object.keys(updateCandidato).length > 0) {
+      await supabase.from("candidatos").update(updateCandidato).eq("id", candidatoId);
+    }
+
+    if (dados.experiencias?.length > 0) {
+      const experiencias = dados.experiencias.map((exp) => ({
+        candidato_id: candidatoId,
+        empresa: exp.empresa,
+        cargo: exp.cargo,
+        setor: exp.setor,
+        data_inicio: exp.data_inicio,
+        data_fim: exp.data_fim,
+        meses: exp.meses,
+        eh_lideranca: exp.eh_lideranca === "true" || exp.eh_lideranca === true,
+        crescimento_interno: exp.crescimento_interno === "true" || exp.crescimento_interno === true,
+      }));
+      await supabase.from("candidatos_experiencia").insert(experiencias);
+    }
+
+    const analiseData = {
+      candidato_id: candidatoId,
+      perfil_resumo: dados.analise.perfil_resumo,
+      pontos_fortes: dados.analise.pontos_fortes,
+      red_flags: dados.analise.red_flags,
+      fit_food_service: dados.analise.fit_food_service,
+      analise_completa: dados.analise.analise_completa,
+      score_ia: parseInt(dados.analise.score_ia, 10) || null,
+      ultima_experiencia: dados.analise.ultima_experiencia,
+      modelo_usado: process.env.CLAUDE_MODEL || "claude-3-5-sonnet-latest",
+      processado_em: new Date().toISOString(),
+    };
+
+    const { data: analiseExistente } = await supabase
+      .from("candidatos_analise")
+      .select("id")
+      .eq("candidato_id", candidatoId)
+      .single();
+
+    if (analiseExistente) {
+      await supabase.from("candidatos_analise").update(analiseData).eq("candidato_id", candidatoId);
+    } else {
+      await supabase.from("candidatos_analise").insert(analiseData);
+    }
+
+    console.log("[processarCV] salvo no Supabase para candidato:", candidatoId);
+    return dados;
+  } catch (err) {
+    console.error("[processarCV] erro:", err);
     return null;
   }
 }
@@ -564,7 +701,7 @@ app.post("/webhook", async (req, res) => {
     let textoFinal = text;
 
     if (!textoFinal && (type === "audio" || type === "document")) {
-      textoFinal = await processarMidia(msg, phoneNumberId);
+      textoFinal = await processarMidia(msg, phoneNumberId, candidatoId);
       if (!textoFinal) {
         await sendKapsoMessage(to, "não consegui processar esse arquivo. pode mandar em texto ou tentar de novo?");
         return res.status(200).json({ ok: true });
