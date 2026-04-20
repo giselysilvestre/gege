@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
-    "job": "node job-analise-diaria.js"
+    "job": "node job-analise-diaria.js",
+    "painel": "node servidor-painel.js"
   },
   "keywords": [],
   "author": "",
