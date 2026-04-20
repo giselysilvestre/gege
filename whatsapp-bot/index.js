@@ -626,6 +626,13 @@ async function getGeResponse(candidatoId, userMessage) {
     direcao: "inbound",
     conteudo: userMessage,
   });
+  await supabase
+    .from("whatsapp_sessoes")
+    .update({
+      ultima_inbound_at: new Date().toISOString(),
+      candidato_respondeu: true,
+    })
+    .eq("id", sessaoId);
 
   history.push({ role: "user", content: userMessage });
 
