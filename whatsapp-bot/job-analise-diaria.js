@@ -98,14 +98,19 @@ async function rodarJob() {
     const camposSimples = [
       'o_que_fazia', 'motivo_saida', 'o_que_gostava', 'relacao_colegas',
       'objetivo_profissional', 'significado_trabalho', 'disponibilidade_horario',
-      'composicao_familiar', 'momento_profissional', 'situacao_emprego'
+      'composicao_familiar', 'momento_profissional'
     ];
 
     for (const campo of camposSimples) {
       if (!dados[campo]) continue;
-      if (!analiseExistente?.[campo]) {
-        update[campo] = dados[campo];
-      }
+      update[campo] = dados[campo];
+    }
+
+    if (dados.situacao_emprego) {
+      await supabase
+        .from('candidatos')
+        .update({ situacao_emprego: dados.situacao_emprego })
+        .eq('id', sessao.candidato_id);
     }
 
     if (dados.pontos_adicionais) {
