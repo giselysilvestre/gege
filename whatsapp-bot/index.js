@@ -6,6 +6,7 @@ const Anthropic = require("@anthropic-ai/sdk");
 const { WhatsAppClient } = require("@kapso/whatsapp-cloud-api");
 const pdfParse = require("pdf-parse/lib/pdf-parse.js");
 const Groq = require("groq-sdk");
+const { SYSTEM_PROMPT_BASE } = require("./ana-prompt");
 dotenv.config();
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
@@ -38,150 +39,7 @@ const kapsoClient = new WhatsAppClient({
   kapsoApiKey: process.env.KAPSO_API_KEY,
 });
 
-const SYSTEM_PROMPT = `## PAPEL E OBJETIVO
-
-Você é a Ana, recrutadora da Gegê — plataforma de recrutamento para food service.
-Seu objetivo é conduzir a triagem de candidatos via WhatsApp, entender o perfil de cada pessoa e identificar vagas compatíveis com ela.
-Você não toma decisão de contratação. Você qualifica e apresenta vagas.
-
-## CONTRATO DE SAÍDA
-
-Sua resposta final é apenas o texto que vai para o WhatsApp do candidato.
-Não escreva análise, observação, tag, cabeçalho, markdown, JSON ou instruções internas na mensagem.
-Máximo 2 parágrafos por mensagem.
-Nunca mande duas perguntas na mesma mensagem.
-
-## PRIORIDADE DE REGRAS
-
-Se houver conflito, siga esta ordem:
-1. Nunca pule etapas
-2. Nunca mande duas perguntas na mesma mensagem
-3. Máquina de estados da conversa
-4. Objetivo de qualificar o candidato
-5. Estilo e tom de comunicação
-
-## REGRAS DE FORMATO OBRIGATÓRIAS
-
-Frases curtas.
-Use emojis raramente — só quando fizer sentido, nunca mais de um por mensagem.
-Nunca diga que é uma IA, a não ser que seja perguntado diretamente.
-Espelhe o nível de formalidade do candidato.
-Se o candidato mandar áudio, trate a transcrição como texto normal e continue o fluxo.
-Sempre responda em português brasileiro, independente do idioma que o candidato usar.
-Escreva tudo em letras minúsculas, como numa conversa informal de WhatsApp. Não capitalize início de frase, nomes próprios ou nada. A única exceção é a sigla CEP, nomes, ou 1 frase foi msg.
-Nunca use hífen, travessão ou qualquer símbolo de pontuação para separar ideias. Use vírgula ou ponto.
-
-## DADOS DO CANDIDATO
-
-## REGRAS DE COLETA DE INFORMAÇÃO
-
-O roteiro é um guia do que precisa ser coletado, não uma sequência rígida.
-Se o candidato mencionar espontaneamente qualquer informação do roteiro — último emprego, disponibilidade, situação atual, família — absorve e considera como respondido. Não repete a pergunta.
-Quando receber [currículo processado], confirma brevemente o que entendeu: "vi que você trabalhou como [cargo] na [empresa], é isso mesmo?" e continua o roteiro pulando o que o CV já respondeu.
-Quando receber [áudio transcrito], processa o conteúdo normalmente como se fosse texto.
-Nunca diz ao candidato que está "registrando" ou "salvando" informações.
-
-Você recebe estes dados antes de cada conversa. Use-os — não pergunte o que já sabe.
-
-Nome: {{nome}}
-Cargo principal: {{cargo_principal}}
-Cidade: {{cidade}}
-Situação de emprego: {{situacao_emprego}}
-Última experiência: {{ultima_experiencia}}
-Disponibilidade de horário: {{disponibilidade_horario}}
-Fit food service: {{fit_food_service}}
-Score IA: {{score_ia}}
-Tags: {{tags}}
-
-Se um campo estiver como "não informado", você pode coletar durante a conversa.
-
-## MÁQUINA DE ESTADOS
-
-Estados válidos:
-abertura
-confirmacao_perfil
-mini_entrevista
-encerramento
-apresentacao_vaga
-confirmacao_localizacao
-encerrado
-
-Objetivo por estado:
-abertura — confirmar interesse e coletar nome se não tiver
-confirmacao_perfil — confirmar cargo e situação de emprego atual
-mini_entrevista — conduzir as 5 perguntas uma por vez
-encerramento — agradecer e avisar que vai mandar vaga quando tiver
-apresentacao_vaga — apresentar vaga e confirmar interesse
-confirmacao_localizacao — confirmar proximidade e coletar CEP
-encerrado — candidato sem interesse ou sem resposta após follow-ups
-
-Transições:
-Se candidato disser que não tem interesse em qualquer momento, ir para encerrado.
-Se candidato não responder, aguardar — o sistema de follow-up cuida disso.
-Não voltar para etapa anterior se a conversa já avançou.
-
-## ALGORITMO DE RESPOSTA POR TURNO
-
-1. Leia o histórico completo da conversa.
-2. Identifique em qual estado está.
-3. Identifique o que o candidato disse ou perguntou.
-4. Componha a próxima mensagem seguindo o estado atual.
-5. Valide o checklist antes de enviar.
-
-## FLUXO DA CONVERSA
-
-ESTADO: abertura
-Quando o candidato responder ao disparo inicial:
-Se não tiver nome na base: "Que bom que respondeu! Me confirma seu nome completo?"
-Se tiver nome: "Boa, {{nome}}! Então vou entender melhor o seu perfil e sempre que tiver vagas compatíveis, te mando por aqui. Só pra confirmar — seu interesse é em vagas de {{cargo_principal}} em restaurantes e lanchonetes, certo?"
-
-ESTADO: confirmacao_perfil
-"E como você está hoje — já está trabalhando?"
-
-ESTADO: mini_entrevista
-"Pra não tomar muito do seu tempo, pensei em fazer assim: ao invés de marcar uma entrevista, vou te mandar algumas perguntinhas por aqui, como se fosse uma conversa. Você pode responder com áudio de até 1 minuto ou texto, como preferir. A ideia é te conhecer melhor pra indicar nas vagas certas. Podemos fazer assim?"
-
-Se confirmar, faça uma pergunta por vez esperando a resposta antes de mandar a próxima:
-
-Pergunta 1: "Me conta sobre seu último emprego — como foi trabalhar lá e por que você saiu?"
-Pergunta 2: "Como você lida com imprevistos no trabalho — atrasos, faltas, aquelas situações que aparecem do nada? Me dá um exemplo se tiver."
-Pergunta 3: "Já teve alguma situação no trabalho que você não concordou com algo? Como você lidou?"
-Pergunta 4: "Como está sua disponibilidade de horário e de escala? Tem alguma restrição?"
-Pergunta 5: "Me fala um pouco sobre você — mora com quem? Tem filhos? O que gosta de fazer?"
-
-ESTADO: encerramento
-"Gostou dessa entrevista por WhatsApp? kkkk Muito obrigada por responder tudo! Assim que tiver uma vaga compatível, te mando por aqui."
-
-ESTADO: apresentacao_vaga
-"Achei uma vaga compatível com você!
-
-É para a [nome_restaurante], [descricao_curta].
-
-Detalhes da oportunidade de [cargo]:
-Salário: R$ [salario]
-Meta de Vendas: até R$ [meta]
-Vale Alimentação: R$ [va]
-Vale Transporte
-Endereço: [endereco]
-Escala: [escala] ([horario])
-
-Tem interesse?"
-
-ESTADO: confirmacao_localizacao
-"Você viu o endereço? Fica em [bairro] — é perto de você?"
-Se confirmar: "Me confirma seu CEP atual? Quero garantir que está atualizado."
-
-ESTADO: encerrado
-Se sem interesse: "Tudo bem! Fico à disposição se surgir algo no futuro. Até mais!"
-Se opt-out: "Claro, sem problema. Não vou mais te contactar. Boa sorte!"
-
-## CHECKLIST FINAL ANTES DE ENVIAR
-
-A mensagem tem no máximo 2 parágrafos.
-Tem no máximo uma pergunta.
-Não tem metacomentário, análise ou instrução interna.
-Não inventa dados que não estão no contexto.
-Avança a conversa para o próximo estado.`;
+const SYSTEM_PROMPT = SYSTEM_PROMPT_BASE;
 
 /**
  * Extrai dados do webhook Kapso v2 (event whatsapp.message.received).
@@ -289,29 +147,38 @@ async function resolveCandidatoIdByPhone(phoneDigits) {
   return created.id;
 }
 
-async function getOrCreateActiveSession(candidatoId) {
-  const { data: existing, error: existingError } = await supabase
+async function getOrCreateActiveSession(candidatoId, candidaturaId = null) {
+  // procura sessão ativa específica dessa candidatura (se informada)
+  // ou qualquer sessão ativa se não tiver candidatura (fluxo reativo)
+  let query = supabase
     .from("whatsapp_sessoes")
-    .select("id")
+    .select("id, candidatura_id, tipo_fluxo, etapa_atual")
     .eq("candidato_id", candidatoId)
     .eq("status", "ativo")
-    .order("primeiro_contato_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .order("ultima_outbound_at", { ascending: false, nullsFirst: false });
 
+  if (candidaturaId) {
+    query = query.eq("candidatura_id", candidaturaId);
+  }
+
+  const { data: existentes, error: existingError } = await query.limit(1);
   if (existingError) {
     console.error("[supabase] erro ao buscar sessão ativa:", existingError);
     throw existingError;
   }
+  if (existentes && existentes.length > 0) return existentes[0].id;
 
-  if (existing?.id) return existing.id;
-
+  // não achou: cria sessão nova com tipo_fluxo e etapa_atual corretos
   const nowIso = new Date().toISOString();
   const { data: created, error: createError } = await supabase
     .from("whatsapp_sessoes")
     .insert({
       candidato_id: candidatoId,
+      candidatura_id: candidaturaId,
       status: "ativo",
+      tipo_fluxo: candidaturaId ? "candidatura" : "reativo",
+      etapa_atual: "abertura",
+      etapas_concluidas: [],
       primeiro_contato_at: nowIso,
     })
     .select("id")
@@ -321,8 +188,106 @@ async function getOrCreateActiveSession(candidatoId) {
     console.error("[supabase] erro ao criar sessão ativa:", createError);
     throw createError;
   }
-
   return created.id;
+}
+
+/**
+ * Carrega todas as sessões ativas de um candidato.
+ * A mais recente (por ultima_outbound_at) vira o "foco" principal.
+ * As outras ficam como contexto adicional.
+ */
+async function loadAllActiveSessionsContext(candidatoId) {
+  const { data: sessoes, error } = await supabase
+    .from("whatsapp_sessoes")
+    .select("id, candidatura_id, tipo_fluxo, etapa_atual, candidato_respondeu, ultima_outbound_at")
+    .eq("candidato_id", candidatoId)
+    .eq("status", "ativo")
+    .order("ultima_outbound_at", { ascending: false, nullsFirst: false });
+
+  if (error) {
+    console.error("[supabase] erro ao buscar sessões ativas:", error);
+    return { foco: null, outras: [] };
+  }
+  if (!sessoes || sessoes.length === 0) return { foco: null, outras: [] };
+
+  const [foco, ...outras] = sessoes;
+  return { foco, outras };
+}
+
+/**
+ * Monta o objeto de contexto da vaga de uma candidatura.
+ * Lê candidaturas → vagas → cliente_unidades → clientes + parse beneficios_json.
+ */
+async function montarContextoVaga(candidaturaId) {
+  if (!candidaturaId) return null;
+
+  const { data: cand, error: candErr } = await supabase
+    .from("candidaturas")
+    .select(
+      `id, vaga_id,
+       vaga:vagas(
+         id, cargo, salario, escala, horario, beneficios_json, unidade_id,
+         unidade:cliente_unidades(nome, endereco_linha, bairro, cidade, uf),
+         cliente:clientes(nome_empresa)
+       )`
+    )
+    .eq("id", candidaturaId)
+    .maybeSingle();
+
+  if (candErr || !cand?.vaga) {
+    console.error("[contexto-vaga] erro ou vaga não encontrada:", candErr);
+    return null;
+  }
+
+  const v = cand.vaga;
+  const u = Array.isArray(v.unidade) ? v.unidade[0] : v.unidade;
+  const cliente = Array.isArray(v.cliente) ? v.cliente[0] : v.cliente;
+  const b = v.beneficios_json || {};
+
+  return {
+    cliente_nome: cliente?.nome_empresa || "",
+    cargo: v.cargo || "",
+    unidade_nome: u?.nome || "",
+    salario: v.salario ? Number(v.salario).toFixed(2).replace(".", ",") : "",
+    bonus_meta: b.bonus_meta || "",
+    vale_alimentacao: b.vale_alimentacao != null ? String(b.vale_alimentacao) : "",
+    endereco_linha: u?.endereco_linha || "",
+    bairro: u?.bairro || "",
+    cidade: u?.cidade || "",
+    uf: u?.uf || "",
+    escala: v.escala || "",
+    horario: v.horario || "",
+  };
+}
+
+/**
+ * Carrega histórico de mensagens de UMA sessão específica (não do candidato inteiro).
+ * Evita misturar conversas de vagas diferentes.
+ */
+async function loadConversationHistoryBySessao(sessaoId) {
+  const { data, error } = await supabase
+    .from("whatsapp_eventos")
+    .select("direcao, conteudo")
+    .eq("sessao_id", sessaoId)
+    .order("criado_em", { ascending: true });
+
+  if (error) {
+    console.error("[supabase] erro ao carregar histórico:", error);
+    return [];
+  }
+
+  const mapped = (data || [])
+    .map((event) => {
+      const role = event.direcao === "inbound" ? "user" : "assistant";
+      const content = typeof event.conteudo === "string" ? event.conteudo : "";
+      return { role, content };
+    })
+    .filter((m) => typeof m.content === "string" && m.content.length > 0);
+
+  if (mapped.length > MAX_HISTORY_MESSAGES) {
+    return mapped.slice(mapped.length - MAX_HISTORY_MESSAGES);
+  }
+  return mapped;
 }
 
 async function loadConversationHistory(candidatoId) {
@@ -617,28 +582,37 @@ CV:
 }
 
 async function getGeResponse(candidatoId, userMessage) {
-  const sessaoId = await getOrCreateActiveSession(candidatoId);
-  const history = await loadConversationHistory(candidatoId);
+  // 1. Carrega sessões ativas do candidato
+  const { foco, outras } = await loadAllActiveSessionsContext(candidatoId);
 
+  // 2. Garante sessão (se não tem foco, cria reativa)
+  const sessaoId = foco?.id || (await getOrCreateActiveSession(candidatoId));
+
+  // 3. Registra evento inbound
   await saveMessageEvent({
     sessaoId,
     candidatoId,
     direcao: "inbound",
     conteudo: userMessage,
   });
-  await supabase
-    .from("whatsapp_sessoes")
-    .update({
-      ultima_inbound_at: new Date().toISOString(),
-      candidato_respondeu: true,
-    })
-    .eq("id", sessaoId);
 
-  history.push({ role: "user", content: userMessage });
+  // 4. Atualiza sessão: candidato respondeu + avança etapa se era disparo_template
+  const nowIso = new Date().toISOString();
+  const updates = {
+    ultima_inbound_at: nowIso,
+    candidato_respondeu: true,
+  };
+  if (foco && !foco.candidato_respondeu) {
+    updates.primeira_resposta_at = nowIso;
+  }
+  if (foco?.etapa_atual === "disparo_template" && foco?.candidatura_id) {
+    updates.etapa_atual = "apresentacao_vaga";
+  }
+  await supabase.from("whatsapp_sessoes").update(updates).eq("id", sessaoId);
 
+  // 5. Busca dados do candidato e análise
   let candidato = null;
   let analise = null;
-
   try {
     const { data: cand } = await supabase
       .from("candidatos")
@@ -657,31 +631,79 @@ async function getGeResponse(candidatoId, userMessage) {
     console.error("[getGeResponse] erro ao buscar dados do candidato:", err);
   }
 
-  const systemPromptDinamico = SYSTEM_PROMPT
-    .replace("{{nome}}", candidato?.nome || "não informado")
-    .replace("{{cargo_principal}}", candidato?.cargo_principal || "não informado")
-    .replace("{{cidade}}", candidato?.cidade || "não informada")
-    .replace("{{situacao_emprego}}", candidato?.situacao_emprego || "não informada")
-    .replace("{{score_ia}}", analise?.score_ia?.toString() || "não calculado")
-    .replace("{{tags}}", analise?.tags?.join(", ") || "nenhuma")
-    .replace("{{fit_food_service}}", analise?.fit_food_service || "não avaliado")
-    .replace("{{ultima_experiencia}}", analise?.ultima_experiencia || "não informada")
-    .replace("{{disponibilidade_horario}}", analise?.disponibilidade_horario || "não informada");
+  // 6. Monta contexto da vaga em foco (se houver candidatura vinculada)
+  const contextoVaga = foco?.candidatura_id
+    ? await montarContextoVaga(foco.candidatura_id)
+    : null;
 
+  // 7. Injeta placeholders no system prompt
+  let systemPromptDinamico = SYSTEM_PROMPT
+    .replace(/\{\{nome\}\}/g, candidato?.nome || "não informado")
+    .replace(/\{\{cargo_principal\}\}/g, candidato?.cargo_principal || "não informado")
+    .replace(/\{\{cidade\}\}/g, candidato?.cidade || "não informada")
+    .replace(/\{\{situacao_emprego\}\}/g, candidato?.situacao_emprego || "não informada")
+    .replace(/\{\{score_ia\}\}/g, analise?.score_ia?.toString() || "não calculado")
+    .replace(/\{\{tags\}\}/g, analise?.tags?.join(", ") || "nenhuma")
+    .replace(/\{\{fit_food_service\}\}/g, analise?.fit_food_service || "não avaliado")
+    .replace(/\{\{ultima_experiencia\}\}/g, analise?.ultima_experiencia || "não informada")
+    .replace(/\{\{disponibilidade_horario\}\}/g, analise?.disponibilidade_horario || "não informada")
+    .replace(/\{\{tipo_fluxo\}\}/g, foco?.tipo_fluxo || "reativo")
+    .replace(/\{\{etapa_atual\}\}/g, foco?.etapa_atual || "abertura");
+
+  if (contextoVaga) {
+    systemPromptDinamico = systemPromptDinamico
+      .replace(/\{\{vaga\.cliente_nome\}\}/g, contextoVaga.cliente_nome)
+      .replace(/\{\{vaga\.cargo\}\}/g, contextoVaga.cargo)
+      .replace(/\{\{vaga\.unidade_nome\}\}/g, contextoVaga.unidade_nome)
+      .replace(/\{\{vaga\.salario\}\}/g, contextoVaga.salario)
+      .replace(/\{\{vaga\.bonus_meta\}\}/g, contextoVaga.bonus_meta)
+      .replace(/\{\{vaga\.vale_alimentacao\}\}/g, contextoVaga.vale_alimentacao)
+      .replace(/\{\{vaga\.endereco_linha\}\}/g, contextoVaga.endereco_linha)
+      .replace(/\{\{vaga\.bairro\}\}/g, contextoVaga.bairro)
+      .replace(/\{\{vaga\.cidade\}\}/g, contextoVaga.cidade)
+      .replace(/\{\{vaga\.uf\}\}/g, contextoVaga.uf)
+      .replace(/\{\{vaga\.escala\}\}/g, contextoVaga.escala)
+      .replace(/\{\{vaga\.horario\}\}/g, contextoVaga.horario);
+  } else {
+    systemPromptDinamico = systemPromptDinamico.replace(/\{\{vaga\.[^}]+\}\}/g, "");
+  }
+
+  // 8. Nota sobre outras sessões ativas (se houver)
+  if (outras && outras.length > 0) {
+    const lista = outras
+      .map((s) => `- candidatura_id=${s.candidatura_id || "sem vaga"}, etapa=${s.etapa_atual}`)
+      .join("\n");
+    systemPromptDinamico += `\n\n## OUTRAS CONVERSAS ATIVAS DESTE CANDIDATO\n${lista}\n\nFoque na conversa em andamento. Se o candidato mencionar outra vaga, peça contexto antes de responder.`;
+  }
+
+  // 9. Carrega histórico DA SESSÃO (não do candidato inteiro)
+  const history = await loadConversationHistoryBySessao(sessaoId);
+
+  // 10. Chama Claude
   const response = await anthropic.messages.create({
-    model: process.env.CLAUDE_MODEL || "claude-3-5-sonnet-latest",
+    model: process.env.CLAUDE_MODEL || "claude-sonnet-4-5",
     max_tokens: 1024,
     system: systemPromptDinamico,
     messages: history,
   });
 
-  const assistantMessage = response.content[0].text;
+  const assistantMessage = response.content
+    .filter((b) => b.type === "text")
+    .map((b) => b.text)
+    .join("\n")
+    .trim();
+
+  // 11. Registra outbound e atualiza ultima_outbound_at
   await saveMessageEvent({
     sessaoId,
     candidatoId,
     direcao: "outbound",
     conteudo: assistantMessage,
   });
+  await supabase
+    .from("whatsapp_sessoes")
+    .update({ ultima_outbound_at: new Date().toISOString() })
+    .eq("id", sessaoId);
 
   return assistantMessage;
 }
