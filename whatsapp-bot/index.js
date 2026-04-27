@@ -101,14 +101,29 @@ function normalizeE164Digits(phone) {
   return String(phone).replace(/\D/g, "");
 }
 
+function formatBrPhoneFromDigits(phoneDigits) {
+  const d = normalizeE164Digits(phoneDigits);
+  if (d.length === 11) {
+    return `+55 ${d.slice(0, 2)} ${d.slice(2, 7)}-${d.slice(7, 11)}`;
+  }
+  if (d.length === 13 && d.startsWith("55")) {
+    return `+55 ${d.slice(2, 4)} ${d.slice(4, 9)}-${d.slice(9, 13)}`;
+  }
+  return null;
+}
+
 function buildPhoneLookupVariants(phoneDigits) {
   const onlyDigits = normalizeE164Digits(phoneDigits);
   const variants = new Set([onlyDigits, `+${onlyDigits}`]);
+  const formattedBr = formatBrPhoneFromDigits(onlyDigits);
+  if (formattedBr) variants.add(formattedBr);
   if (onlyDigits.startsWith("55")) {
     const local = onlyDigits.slice(2);
     if (local) {
       variants.add(local);
       variants.add(`+55${local}`);
+      const localFormattedBr = formatBrPhoneFromDigits(local);
+      if (localFormattedBr) variants.add(localFormattedBr);
     }
   }
   return Array.from(variants).filter(Boolean);
