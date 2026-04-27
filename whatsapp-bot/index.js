@@ -631,12 +631,15 @@ async function getGeResponse(candidatoId, userMessage) {
     console.error("[getGeResponse] erro ao buscar dados do candidato:", err);
   }
 
-  // 6. Monta contexto da vaga em foco (se houver candidatura vinculada)
-  const contextoVaga = foco?.candidatura_id
-    ? await montarContextoVaga(foco.candidatura_id)
-    : null;
+  // 6. Define estado efetivo para o prompt já refletir transição de etapa no mesmo turno
+  const candidaturaFocoId = foco?.candidatura_id || null;
+  const tipoFluxoAtual = foco?.tipo_fluxo || (candidaturaFocoId ? "candidatura" : "reativo");
+  const etapaAtualPrompt = updates.etapa_atual || foco?.etapa_atual || "abertura";
 
-  // 7. Injeta placeholders no system prompt
+  // 7. Monta contexto da vaga em foco (se houver candidatura vinculada)
+  const contextoVaga = candidaturaFocoId ? await montarContextoVaga(candidaturaFocoId) : null;
+
+  // 8. Injeta placeholders no system prompt
   let systemPromptDinamico = SYSTEM_PROMPT
     .replace(/\{\{nome\}\}/g, candidato?.nome || "não informado")
     .replace(/\{\{cargo_principal\}\}/g, candidato?.cargo_principal || "não informado")
@@ -647,8 +650,8 @@ async function getGeResponse(candidatoId, userMessage) {
     .replace(/\{\{fit_food_service\}\}/g, analise?.fit_food_service || "não avaliado")
     .replace(/\{\{ultima_experiencia\}\}/g, analise?.ultima_experiencia || "não informada")
     .replace(/\{\{disponibilidade_horario\}\}/g, analise?.disponibilidade_horario || "não informada")
-    .replace(/\{\{tipo_fluxo\}\}/g, foco?.tipo_fluxo || "reativo")
-    .replace(/\{\{etapa_atual\}\}/g, foco?.etapa_atual || "abertura");
+    .replace(/\{\{tipo_fluxo\}\}/g, tipoFluxoAtual)
+    .replace(/\{\{etapa_atual\}\}/g, etapaAtualPrompt);
 
   if (contextoVaga) {
     systemPromptDinamico = systemPromptDinamico
@@ -668,7 +671,7 @@ async function getGeResponse(candidatoId, userMessage) {
     systemPromptDinamico = systemPromptDinamico.replace(/\{\{vaga\.[^}]+\}\}/g, "");
   }
 
-  // 8. Nota sobre outras sessões ativas (se houver)
+  // 9. Nota sobre outras sessões ativas (se houver)
   if (outras && outras.length > 0) {
     const lista = outras
       .map((s) => `- candidatura_id=${s.candidatura_id || "sem vaga"}, etapa=${s.etapa_atual}`)
@@ -676,10 +679,10 @@ async function getGeResponse(candidatoId, userMessage) {
     systemPromptDinamico += `\n\n## OUTRAS CONVERSAS ATIVAS DESTE CANDIDATO\n${lista}\n\nFoque na conversa em andamento. Se o candidato mencionar outra vaga, peça contexto antes de responder.`;
   }
 
-  // 9. Carrega histórico DA SESSÃO (não do candidato inteiro)
+  // 10. Carrega histórico DA SESSÃO (não do candidato inteiro)
   const history = await loadConversationHistoryBySessao(sessaoId);
 
-  // 10. Chama Claude
+  // 11. Chama Claude
   const response = await anthropic.messages.create({
     model: process.env.CLAUDE_MODEL || "claude-sonnet-4-5",
     max_tokens: 1024,
@@ -693,7 +696,7 @@ async function getGeResponse(candidatoId, userMessage) {
     .join("\n")
     .trim();
 
-  // 11. Registra outbound e atualiza ultima_outbound_at
+  // 12. Registra outbound e atualiza ultima_outbound_at
   await saveMessageEvent({
     sessaoId,
     candidatoId,
