@@ -13,7 +13,7 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const PORT = Number(process.env.PORT || 3333);
 const KAPSO_PHONE_NUMBER_ID = process.env.KAPSO_PHONE_NUMBER_ID || "";
-const APP_VERSION = "fix-phone-resolver-v3-2026-04-27";
+const APP_VERSION = "candidatura-etapa-interesse-v1-2026-04-27";
 
 const MAX_HISTORY_MESSAGES = 20;
 
@@ -481,6 +481,37 @@ function montarMensagemApresentacaoVaga(contextoVaga) {
   ].join("\n");
 }
 
+function normalizarTextoRespostaCurta(s) {
+  return (s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Resposta afirmativa à pergunta "tem interesse pela vaga?" */
+function detectaSimInteresseVaga(texto) {
+  const t = normalizarTextoRespostaCurta(texto);
+  if (!t) return false;
+  if (/sei\b|talvez|duvid|pergunta|\?/.test(t)) return false;
+  return /^(sim|s|ok|pode|quero|tenho interesse|com certeza|bora|show|beleza|fechado|topo|aceito|isso|uhum)\b|^sim[\s,.\-]|^ok[\s,.\-]|^👍/.test(
+    t
+  );
+}
+
+/** Resposta negativa explícita (evita "não sei", perguntas etc.) */
+function detectaNaoInteresseVaga(texto) {
+  const t = normalizarTextoRespostaCurta(texto);
+  if (!t) return false;
+  if (/sei\b|talvez|duvid|pergunta|\?/.test(t)) return false;
+  return (
+    /^(não|nao)(\s*[,.]|$)|^n(\s*[,.]|$)|^não quero|^nao quero|^sem interesse|^não tenho interesse|^nao tenho interesse|^prefiro não|^prefiro nao|^passo$|^desisto|^obrigad[oa].*\bn(ão|ao)\b/.test(
+      t
+    )
+  );
+}
+
 async function sendWhatsAppMessage(toDigits, message) {
   const phoneNumberId = process.env.KAPSO_PHONE_NUMBER_ID;
   const apiKey = process.env.KAPSO_API_KEY;
@@ -757,6 +788,13 @@ async function getGeResponse(candidatoId, userMessage) {
   if (foco?.etapa_atual === "disparo_template" && foco?.candidatura_id) {
     updates.etapa_atual = "apresentacao_vaga";
   }
+  if (foco?.etapa_atual === "apresentacao_vaga") {
+    if (detectaSimInteresseVaga(userMessage)) {
+      updates.etapa_atual = "confirma_endereco";
+    } else if (detectaNaoInteresseVaga(userMessage)) {
+      updates.etapa_atual = "encerramento";
+    }
+  }
   await supabase.from("whatsapp_sessoes").update(updates).eq("id", sessaoId);
 
   // 5. Busca dados do candidato e análise
@@ -828,8 +866,12 @@ async function getGeResponse(candidatoId, userMessage) {
     systemPromptDinamico += `\n\n## OUTRAS CONVERSAS ATIVAS DESTE CANDIDATO\n${lista}\n\nFoque na conversa em andamento. Se o candidato mencionar outra vaga, peça contexto antes de responder.`;
   }
 
-  // 10. Etapa crítica: candidatura + apresentacao_vaga deve seguir formato fixo
-  if (tipoFluxoAtual === "candidatura" && etapaAtualPrompt === "apresentacao_vaga") {
+  // 10. Só neste turno (vindo do template): texto fixo da vaga. Depois do "sim" inicial a etapa já é apresentacao_vaga no BD — não repetir o bloco.
+  if (
+    tipoFluxoAtual === "candidatura" &&
+    etapaAtualPrompt === "apresentacao_vaga" &&
+    foco?.etapa_atual === "disparo_template"
+  ) {
     const assistantMessage = montarMensagemApresentacaoVaga(contextoVaga);
 
     await saveMessageEvent({
