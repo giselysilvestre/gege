@@ -114,20 +114,55 @@ function buildPhoneLookupVariants(phoneDigits) {
 }
 
 async function resolveCandidatoIdByPhone(phoneDigits) {
+  const targetDigits = normalizeE164Digits(phoneDigits);
   const phoneVariants = buildPhoneLookupVariants(phoneDigits);
+  const final8 = targetDigits.slice(-8);
+
+  // 1) Tentativa direta por variações exatas
   const { data, error } = await supabase
     .from("candidatos")
-    .select("id,telefone")
+    .select("id,telefone,nome")
     .in("telefone", phoneVariants)
-    .limit(1);
+    .limit(10);
 
   if (error) {
     console.error("[supabase] erro ao buscar candidato por telefone:", error);
     throw error;
   }
 
-  const candidate = (data || [])[0];
-  if (candidate?.id) return candidate.id;
+  let matches = (data || []).filter((c) => normalizeE164Digits(c.telefone || "") === targetDigits);
+
+  // 2) Fallback robusto: busca por final do número e normaliza em memória
+  if (matches.length === 0 && final8) {
+    const { data: approx, error: approxErr } = await supabase
+      .from("candidatos")
+      .select("id,telefone,nome")
+      .ilike("telefone", `%${final8}%`)
+      .limit(30);
+    if (approxErr) {
+      console.error("[supabase] erro no fallback de telefone:", approxErr);
+      throw approxErr;
+    }
+    matches = (approx || []).filter((c) => normalizeE164Digits(c.telefone || "") === targetDigits);
+  }
+
+  if (matches.length === 1) return matches[0].id;
+  if (matches.length > 1) {
+    // 3) Desempate: prioriza candidato com sessão ativa mais recente
+    const ids = matches.map((m) => m.id);
+    const { data: sessoes, error: sessErr } = await supabase
+      .from("whatsapp_sessoes")
+      .select("candidato_id, status, ultima_outbound_at, candidatura_id")
+      .in("candidato_id", ids)
+      .eq("status", "ativo")
+      .order("ultima_outbound_at", { ascending: false, nullsFirst: false })
+      .limit(1);
+    if (!sessErr && sessoes && sessoes.length > 0) {
+      return sessoes[0].candidato_id;
+    }
+    // sem sessão ativa: fica com o primeiro match normalizado
+    return matches[0].id;
+  }
 
   const canonicalPhone = phoneVariants[0] || normalizeE164Digits(phoneDigits);
   const { data: created, error: createError } = await supabase
@@ -145,6 +180,23 @@ async function resolveCandidatoIdByPhone(phoneDigits) {
     throw createError;
   }
   return created.id;
+}
+
+async function resolveCandidatoIdByConversation(conversationId) {
+  if (!conversationId) return null;
+  const { data, error } = await supabase
+    .from("whatsapp_sessoes")
+    .select("candidato_id, status, candidatura_id, ultima_outbound_at")
+    .eq("kapso_session_id", conversationId)
+    .eq("status", "ativo")
+    .order("ultima_outbound_at", { ascending: false, nullsFirst: false })
+    .limit(1);
+
+  if (error) {
+    console.error("[supabase] erro ao resolver candidato por conversationId:", error);
+    return null;
+  }
+  return data?.[0]?.candidato_id || null;
 }
 
 async function getOrCreateActiveSession(candidatoId, candidaturaId = null) {
@@ -853,7 +905,11 @@ app.post("/webhook", async (req, res) => {
     console.log("[webhook] payload bruto:", JSON.stringify(req.body, null, 2));
     console.log(`[webhook] conversa ${conversationId} de ${to}: ${text}`);
 
-    const candidatoId = await resolveCandidatoIdByPhone(to);
+    // Prioridade: quando existir conversationId da Kapso, usa o vínculo da sessão.
+    // Isso evita ambiguidades quando o mesmo telefone está cadastrado em mais de um candidato.
+    const candidatoId =
+      (await resolveCandidatoIdByConversation(conversationId)) ||
+      (await resolveCandidatoIdByPhone(to));
     let textoFinal = text;
 
     if (!textoFinal && (type === "audio" || type === "document" || type === "image")) {
