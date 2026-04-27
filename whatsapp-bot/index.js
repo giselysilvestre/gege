@@ -210,7 +210,26 @@ async function loadAllActiveSessionsContext(candidatoId) {
   }
   if (!sessoes || sessoes.length === 0) return { foco: null, outras: [] };
 
-  const [foco, ...outras] = sessoes;
+  const parseIso = (v) => (v ? new Date(v).getTime() : 0);
+  const prioridade = (s) => {
+    let p = 0;
+    if (s?.tipo_fluxo === "candidatura" && s?.candidatura_id) p += 100;
+    if (s?.etapa_atual === "disparo_template") p += 50;
+    if (s?.etapa_atual === "apresentacao_vaga") p += 40;
+    if (s?.etapa_atual === "confirma_endereco") p += 30;
+    if (s?.etapa_atual === "mini_entrevista") p += 20;
+    return p;
+  };
+
+  // Regra de foco: prioriza sessão proativa de candidatura e, em empate, mais recente.
+  const ordenadas = [...sessoes].sort((a, b) => {
+    const pa = prioridade(a);
+    const pb = prioridade(b);
+    if (pb !== pa) return pb - pa;
+    return parseIso(b?.ultima_outbound_at) - parseIso(a?.ultima_outbound_at);
+  });
+
+  const [foco, ...outras] = ordenadas;
   return { foco, outras };
 }
 
@@ -221,31 +240,55 @@ async function loadAllActiveSessionsContext(candidatoId) {
 async function montarContextoVaga(candidaturaId) {
   if (!candidaturaId) return null;
 
+  // 1) Candidatura -> pega vaga_id
   const { data: cand, error: candErr } = await supabase
     .from("candidaturas")
-    .select(
-      `id, vaga_id,
-       vaga:vagas(
-         id, cargo, salario, escala, horario, beneficios_json, unidade_id,
-         unidade:cliente_unidades(nome, endereco_linha, bairro, cidade, uf),
-         cliente:clientes(nome_empresa)
-       )`
-    )
+    .select("id, vaga_id")
     .eq("id", candidaturaId)
     .maybeSingle();
 
-  if (candErr || !cand?.vaga) {
-    console.error("[contexto-vaga] erro ou vaga não encontrada:", candErr);
+  if (candErr || !cand?.vaga_id) {
+    console.error("[contexto-vaga] candidatura sem vaga_id:", candErr);
     return null;
   }
 
-  const v = cand.vaga;
+  // 2) Vaga -> pega dados base + unidade + cliente
+  const { data: vaga, error: vagaErr } = await supabase
+    .from("vagas")
+    .select(
+      `id, cliente_id, unidade_id, cargo, salario, escala, horario, beneficios_json,
+       unidade:cliente_unidades(id, nome, endereco_linha, bairro, cidade, uf),
+       cliente:clientes(id, nome_empresa)`
+    )
+    .eq("id", cand.vaga_id)
+    .maybeSingle();
+
+  if (vagaErr || !vaga) {
+    console.error("[contexto-vaga] erro ao carregar vaga:", vagaErr);
+    return null;
+  }
+
+  const v = vaga;
   const u = Array.isArray(v.unidade) ? v.unidade[0] : v.unidade;
-  const cliente = Array.isArray(v.cliente) ? v.cliente[0] : v.cliente;
+  const clienteDireto = Array.isArray(v.cliente) ? v.cliente[0] : v.cliente;
   const b = v.beneficios_json || {};
 
+  // 3) Fallback do cliente via unidade, se o join direto vier vazio
+  let clienteNome = clienteDireto?.nome_empresa || "";
+  if (!clienteNome && u?.id) {
+    const { data: unidadeComCliente } = await supabase
+      .from("cliente_unidades")
+      .select("id, cliente:clientes(nome_empresa)")
+      .eq("id", u.id)
+      .maybeSingle();
+    const clienteViaUnidade = Array.isArray(unidadeComCliente?.cliente)
+      ? unidadeComCliente.cliente[0]
+      : unidadeComCliente?.cliente;
+    clienteNome = clienteViaUnidade?.nome_empresa || "";
+  }
+
   return {
-    cliente_nome: cliente?.nome_empresa || "",
+    cliente_nome: clienteNome,
     cargo: v.cargo || "",
     unidade_nome: u?.nome || "",
     salario: v.salario ? Number(v.salario).toFixed(2).replace(".", ",") : "",
@@ -330,6 +373,27 @@ async function saveMessageEvent({ sessaoId, candidatoId, direcao, conteudo }) {
     console.error("[supabase] erro ao salvar evento:", error);
     throw error;
   }
+}
+
+function montarMensagemApresentacaoVaga(contextoVaga) {
+  if (!contextoVaga) {
+    return "me dá um minuto que vou confirmar os detalhes da vaga com o time";
+  }
+
+  return [
+    `Que ótimo! é uma vaga pra ${contextoVaga.cliente_nome}:`,
+    `🧑‍🍳 ${contextoVaga.cargo} — ${contextoVaga.unidade_nome}`,
+    `💰 Salário: R$ ${contextoVaga.salario}`,
+    `🎯 Bônus por meta: R$ ${contextoVaga.bonus_meta} (além do salário)`,
+    `🍽️ Vale Alimentação: R$ ${contextoVaga.vale_alimentacao}`,
+    "🚌 Vale Transporte",
+    "💊 Plano de Saúde",
+    "📈 Plano de Carreira",
+    `📍 ${contextoVaga.endereco_linha}, ${contextoVaga.bairro} — ${contextoVaga.cidade}/${contextoVaga.uf}`,
+    `🕐 Escala ${contextoVaga.escala} (${contextoVaga.horario})`,
+    "",
+    "você tem interesse pela vaga?",
+  ].join("\n");
 }
 
 async function sendWhatsAppMessage(toDigits, message) {
@@ -679,10 +743,28 @@ async function getGeResponse(candidatoId, userMessage) {
     systemPromptDinamico += `\n\n## OUTRAS CONVERSAS ATIVAS DESTE CANDIDATO\n${lista}\n\nFoque na conversa em andamento. Se o candidato mencionar outra vaga, peça contexto antes de responder.`;
   }
 
-  // 10. Carrega histórico DA SESSÃO (não do candidato inteiro)
+  // 10. Etapa crítica: candidatura + apresentacao_vaga deve seguir formato fixo
+  if (tipoFluxoAtual === "candidatura" && etapaAtualPrompt === "apresentacao_vaga") {
+    const assistantMessage = montarMensagemApresentacaoVaga(contextoVaga);
+
+    await saveMessageEvent({
+      sessaoId,
+      candidatoId,
+      direcao: "outbound",
+      conteudo: assistantMessage,
+    });
+    await supabase
+      .from("whatsapp_sessoes")
+      .update({ ultima_outbound_at: new Date().toISOString() })
+      .eq("id", sessaoId);
+
+    return assistantMessage;
+  }
+
+  // 11. Carrega histórico DA SESSÃO (não do candidato inteiro)
   const history = await loadConversationHistoryBySessao(sessaoId);
 
-  // 11. Chama Claude
+  // 12. Chama Claude
   const response = await anthropic.messages.create({
     model: process.env.CLAUDE_MODEL || "claude-sonnet-4-5",
     max_tokens: 1024,
@@ -696,7 +778,7 @@ async function getGeResponse(candidatoId, userMessage) {
     .join("\n")
     .trim();
 
-  // 12. Registra outbound e atualiza ultima_outbound_at
+  // 13. Registra outbound e atualiza ultima_outbound_at
   await saveMessageEvent({
     sessaoId,
     candidatoId,
