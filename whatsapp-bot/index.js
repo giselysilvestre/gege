@@ -176,6 +176,21 @@ async function resolveCandidatoIdByPhone(phoneDigits) {
     .single();
 
   if (createError) {
+    // Concorrência/duplicidade: outro fluxo pode ter criado o candidato entre a leitura e o insert.
+    // Em vez de quebrar o webhook, reaproveita o cadastro existente do mesmo telefone normalizado.
+    if (createError.code === "23505") {
+      const { data: retry, error: retryErr } = await supabase
+        .from("candidatos")
+        .select("id,telefone")
+        .ilike("telefone", `%${final8}%`)
+        .limit(30);
+      if (!retryErr) {
+        const found = (retry || []).find(
+          (c) => normalizeE164Digits(c.telefone || "") === targetDigits
+        );
+        if (found?.id) return found.id;
+      }
+    }
     console.error("[supabase] erro ao criar candidato automático:", createError);
     throw createError;
   }
