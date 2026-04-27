@@ -118,6 +118,7 @@ async function resolveCandidatoIdByPhone(phoneDigits) {
   const targetDigits = normalizeE164Digits(phoneDigits);
   const phoneVariants = buildPhoneLookupVariants(phoneDigits);
   const final8 = targetDigits.slice(-8);
+  const final4 = targetDigits.slice(-4);
 
   // 1) Tentativa direta por variações exatas
   const { data, error } = await supabase
@@ -138,7 +139,8 @@ async function resolveCandidatoIdByPhone(phoneDigits) {
     const { data: approx, error: approxErr } = await supabase
       .from("candidatos")
       .select("id,telefone,nome")
-      .ilike("telefone", `%${final8}%`)
+      // Busca ampla por sufixo curto para funcionar com formatos como "+55 21 97026-9716".
+      .ilike("telefone", `%${final4}%`)
       .limit(30);
     if (approxErr) {
       console.error("[supabase] erro no fallback de telefone:", approxErr);
@@ -183,7 +185,7 @@ async function resolveCandidatoIdByPhone(phoneDigits) {
       const { data: retry, error: retryErr } = await supabase
         .from("candidatos")
         .select("id,telefone")
-        .ilike("telefone", `%${final8}%`)
+        .ilike("telefone", `%${final4}%`)
         .limit(30);
       if (!retryErr) {
         const found = (retry || []).find(
