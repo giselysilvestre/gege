@@ -13,6 +13,7 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const PORT = Number(process.env.PORT || 3333);
 const KAPSO_PHONE_NUMBER_ID = process.env.KAPSO_PHONE_NUMBER_ID || "";
+const APP_VERSION = "fix-phone-resolver-v3-2026-04-27";
 
 const MAX_HISTORY_MESSAGES = 20;
 
@@ -964,4 +965,5 @@ app.post("/webhook", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`[whatsapp-bot] rodando em http://localhost:${PORT}`);
   console.log("[whatsapp-bot] webhook em POST /webhook (Kapso v2)");
+  console.log(`[whatsapp-bot] version=${APP_VERSION}`);
 });
