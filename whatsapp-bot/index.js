@@ -460,6 +460,121 @@ async function saveMessageEvent({ sessaoId, candidatoId, direcao, conteudo }) {
   }
 }
 
+function extrairJsonSeguro(texto) {
+  if (!texto) return null;
+  const limpo = String(texto).replace(/```json|```/g, "").trim();
+  try {
+    return JSON.parse(limpo);
+  } catch (_err) {
+    const ini = limpo.indexOf("{");
+    const fim = limpo.lastIndexOf("}");
+    if (ini >= 0 && fim > ini) {
+      try {
+        return JSON.parse(limpo.slice(ini, fim + 1));
+      } catch (_err2) {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+async function atualizarScorePosEntrevista(candidatoId, sessaoId) {
+  try {
+    const historico = await loadConversationHistoryBySessao(sessaoId);
+    if (!historico || historico.length === 0) return;
+
+    const respostasCandidato = historico.filter((m) => m.role === "user" && m.content).length;
+    if (respostasCandidato < 4) return;
+
+    const roteiroMini = [
+      "me conta sobre seu último emprego",
+      "como você lida com imprevistos no trabalho",
+      "já teve situação no trabalho que você não concordou",
+      "como tá sua disponibilidade de horário e escala",
+      "me fala um pouco de você",
+    ];
+    const perguntasRoteiroRespondidas = roteiroMini.filter((trecho) =>
+      historico.some(
+        (m) => m.role === "assistant" && m.content && m.content.toLowerCase().includes(trecho)
+      )
+    ).length;
+    if (perguntasRoteiroRespondidas < 2) return;
+
+    const transcricao = historico
+      .map((m) => `${m.role === "assistant" ? "ana" : "candidato"}: ${m.content}`)
+      .join("\n");
+
+    const prompt = `Você é analista de recrutamento.
+Avalie a mini-entrevista abaixo e retorne APENAS JSON válido:
+{
+  "score_pos_entrevista": 0-100,
+  "analise_pos_entrevista": "texto curto com pontos fortes, riscos e recomendação",
+  "momento_profissional": "texto curto",
+  "pontos_positivos": "texto curto",
+  "pontos_melhoria": "texto curto"
+}
+
+Regras:
+- score_pos_entrevista inteiro de 0 a 100.
+- Seja objetivo e baseado somente na conversa.
+- Não use markdown.
+
+Conversa:
+"""${transcricao}"""`;
+
+    const resposta = await anthropic.messages.create({
+      model: process.env.CLAUDE_MODEL || "claude-sonnet-4-5",
+      max_tokens: 600,
+      messages: [{ role: "user", content: prompt }],
+    });
+    const texto = (resposta.content || [])
+      .filter((c) => c.type === "text")
+      .map((c) => c.text)
+      .join("\n")
+      .trim();
+    const avaliacao = extrairJsonSeguro(texto);
+    if (!avaliacao) return;
+
+    const scorePos = Number.parseInt(avaliacao.score_pos_entrevista, 10);
+    if (Number.isNaN(scorePos)) return;
+    const scorePosSanitizado = Math.max(0, Math.min(100, scorePos));
+
+    const { data: analiseAtual } = await supabase
+      .from("candidatos_analise")
+      .select("id, score_ia")
+      .eq("candidato_id", candidatoId)
+      .maybeSingle();
+
+    const scoreIa = Number.parseInt(analiseAtual?.score_ia, 10);
+    const scoreFinal = Number.isNaN(scoreIa)
+      ? scorePosSanitizado
+      : Math.round(scoreIa * 0.6 + scorePosSanitizado * 0.4);
+
+    const payload = {
+      score_pos_entrevista: scorePosSanitizado,
+      analise_pos_entrevista: avaliacao.analise_pos_entrevista || null,
+      momento_profissional: avaliacao.momento_profissional || null,
+      pontos_positivos: avaliacao.pontos_positivos || null,
+      pontos_melhoria: avaliacao.pontos_melhoria || null,
+      score_final: scoreFinal,
+      atualizado_em: new Date().toISOString(),
+    };
+
+    if (analiseAtual?.id) {
+      await supabase.from("candidatos_analise").update(payload).eq("candidato_id", candidatoId);
+    } else {
+      await supabase.from("candidatos_analise").insert({
+        candidato_id: candidatoId,
+        ...payload,
+        processado_em: new Date().toISOString(),
+      });
+    }
+  } catch (err) {
+    console.error("[entrevista-score] erro ao atualizar score pós-entrevista:", err);
+  }
+}
+
 function montarMensagemApresentacaoVaga(contextoVaga) {
   if (!contextoVaga) {
     return "me dá um minuto que vou confirmar os detalhes da vaga com o time";
@@ -916,6 +1031,13 @@ async function getGeResponse(candidatoId, userMessage) {
     .from("whatsapp_sessoes")
     .update({ ultima_outbound_at: new Date().toISOString() })
     .eq("id", sessaoId);
+
+  if (
+    tipoFluxoAtual === "candidatura" &&
+    ["mini_entrevista", "agendamento_entrevista", "encerramento"].includes(etapaAtualPrompt)
+  ) {
+    await atualizarScorePosEntrevista(candidatoId, sessaoId);
+  }
 
   return assistantMessage;
 }
