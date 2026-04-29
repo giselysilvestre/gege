@@ -64,6 +64,15 @@ type CandidatoExperiencia = {
   eh_lideranca: boolean | null;
 };
 
+type WhatsAppEvento = {
+  id: string;
+  direcao: "inbound" | "outbound" | string;
+  conteudo: string | null;
+  criado_em: string | null;
+  tipo_mensagem: string | null;
+  tipo_midia: string | null;
+};
+
 type HistoricoEmpItem = {
   empresa: string;
   cargo?: string;
@@ -365,6 +374,7 @@ function CandidatoPerfilInner() {
   const [candidatura, setCandidatura] = useState<CandidaturaRow | null>(null);
   const [analise, setAnalise] = useState<CandidatoAnalise | null>(null);
   const [experiencias, setExperiencias] = useState<CandidatoExperiencia[]>([]);
+  const [whatsappEventos, setWhatsappEventos] = useState<WhatsAppEvento[]>([]);
   const [vagaCargo, setVagaCargo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const supabase = useSupabaseBrowser();
@@ -403,9 +413,16 @@ function CandidatoPerfilInner() {
       .order("data_fim", { ascending: false, nullsFirst: true })
       .order("data_inicio", { ascending: false, nullsFirst: false })
       .limit(50);
+    const whatsappEventosPromise = supabase
+      .from("whatsapp_eventos")
+      .select("id,direcao,conteudo,criado_em,tipo_mensagem,tipo_midia")
+      .eq("candidato_id", id)
+      .order("criado_em", { ascending: false })
+      .limit(120);
 
     if (vagaId) {
-      const [{ data: candRow }, { data: vagaRow }, { data: analiseRow }, { data: expRows }] = await Promise.all([
+      const [{ data: candRow }, { data: vagaRow }, { data: analiseRow }, { data: expRows }, { data: waRows }] =
+        await Promise.all([
         supabase
           .from("candidaturas")
           .select("id, status, score_compatibilidade, distancia_km, enviado_em, atualizado_em, tags, observacao")
@@ -415,18 +432,25 @@ function CandidatoPerfilInner() {
         supabase.from("vagas").select("cargo, titulo_publicacao").eq("id", vagaId).maybeSingle(),
         analisePromise,
         experienciaPromise,
-      ]);
+        whatsappEventosPromise,
+        ]);
       setCandidatura((candRow as CandidaturaRow) ?? null);
       const vr = vagaRow as { cargo: string; titulo_publicacao?: string | null } | null;
       setVagaCargo(vr ? vagaTituloPublico(vr) : null);
       setAnalise((analiseRow as CandidatoAnalise) ?? null);
       setExperiencias((expRows as CandidatoExperiencia[] | null) ?? []);
+      setWhatsappEventos((waRows as WhatsAppEvento[] | null) ?? []);
     } else {
-      const [{ data: analiseRow }, { data: expRows }] = await Promise.all([analisePromise, experienciaPromise]);
+      const [{ data: analiseRow }, { data: expRows }, { data: waRows }] = await Promise.all([
+        analisePromise,
+        experienciaPromise,
+        whatsappEventosPromise,
+      ]);
       setCandidatura(null);
       setVagaCargo(null);
       setAnalise((analiseRow as CandidatoAnalise) ?? null);
       setExperiencias((expRows as CandidatoExperiencia[] | null) ?? []);
+      setWhatsappEventos((waRows as WhatsAppEvento[] | null) ?? []);
     }
   }, [id, vagaId, supabase]);
 
@@ -849,6 +873,42 @@ function CandidatoPerfilInner() {
                   </div>
                 ) : (
                   <p className="fs13 c600">Sem eventos registrados para esta candidatura.</p>
+                )}
+              </div>
+
+              <div className="card">
+                <div className="fs11 fw7 muted" style={{ textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 12 }}>
+                  Conversa WhatsApp
+                </div>
+                {whatsappEventos.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 420, overflow: "auto", paddingRight: 2 }}>
+                    {[...whatsappEventos].reverse().map((m) => {
+                      const inbound = m.direcao === "inbound";
+                      return (
+                        <div
+                          key={m.id}
+                          style={{
+                            alignSelf: inbound ? "flex-start" : "flex-end",
+                            maxWidth: "92%",
+                            background: inbound ? "var(--bg-soft, #f5f5f5)" : "var(--olive-100, #eaf4ed)",
+                            border: "1px solid var(--line, #e5e7eb)",
+                            borderRadius: 12,
+                            padding: "8px 10px",
+                          }}
+                        >
+                          <div className="fs11 muted" style={{ marginBottom: 4 }}>
+                            {inbound ? "Candidato" : "Ana"} · {formatTsPt(m.criado_em)}
+                            {m.tipo_mensagem ? ` · ${m.tipo_mensagem}` : ""}
+                          </div>
+                          <div className="fs13" style={{ whiteSpace: "pre-wrap", lineHeight: 1.35 }}>
+                            {m.conteudo?.trim() || "(sem conteúdo)"}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="fs13 c600">Ainda não há mensagens de WhatsApp para este candidato.</p>
                 )}
               </div>
             </div>
