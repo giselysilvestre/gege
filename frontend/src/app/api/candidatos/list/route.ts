@@ -53,6 +53,15 @@ function bestByCandidate(rows: CandidatoInscricaoRow[]): CandidatoInscricaoRow[]
   return [...byCand.values()].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
 }
 
+type SummaryCounts = {
+  todos: number;
+  triagem: number;
+  entrevista: number;
+  teste: number;
+  contratado: number;
+  desistiu: number;
+};
+
 export async function GET(request: Request) {
   try {
     return await handleCandidatosListGet(request);
@@ -110,6 +119,49 @@ async function handleCandidatosListGet(request: Request) {
   }
   debug.cliente_id = cliente.id;
 
+  const countQuery = supabase
+    .from("candidaturas")
+    .select("status", { count: "exact" })
+    .in(
+      "vaga_id",
+      (
+        (
+          await supabase
+            .from("vagas")
+            .select("id")
+            .eq("cliente_id", cliente.id)
+            .neq("status_vaga", "cancelada")
+        ).data || []
+      ).map((v) => String(v.id))
+    );
+  const { data: statusRows, count: totalCandidaturas, error: statusErr } = vagaFilter
+    ? await supabase
+        .from("candidaturas")
+        .select("status", { count: "exact" })
+        .eq("vaga_id", vagaFilter)
+    : await countQuery;
+  if (statusErr) {
+    debug.summary_error = statusErr.message;
+  }
+  const summaryCounts: SummaryCounts = {
+    todos: totalCandidaturas ?? 0,
+    triagem: 0,
+    entrevista: 0,
+    teste: 0,
+    contratado: 0,
+    desistiu: 0,
+  };
+  for (const row of (statusRows as Array<{ status: string | null }> | null) ?? []) {
+    const s = String(row.status || "");
+    if (s === "novo" || s === "em_triagem") summaryCounts.triagem += 1;
+    else if (s === "em_entrevista" || s === "entrevista" || s === "entrevistado")
+      summaryCounts.entrevista += 1;
+    else if (s === "em_teste" || s === "teste" || s === "aprovado" || s === "aprovado_teste")
+      summaryCounts.teste += 1;
+    else if (s === "contratado") summaryCounts.contratado += 1;
+    else if (s === "reprovado" || s === "desistiu") summaryCounts.desistiu += 1;
+  }
+
   const { data: vagasRows, error: vagasError } = await supabase
     .from("vagas")
     .select("id,cargo,titulo_publicacao,status_vaga")
@@ -127,7 +179,7 @@ async function handleCandidatosListGet(request: Request) {
   }));
   if (!vagas.length) {
     return jsonWithOptionalDebug(
-      { rows: [], vagasAtivas, page, pageSize, hasMore: false },
+      { rows: [], vagasAtivas, page, pageSize, hasMore: false, summaryCounts },
       debug,
       { headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=30" } }
     );
@@ -167,7 +219,7 @@ async function handleCandidatosListGet(request: Request) {
   debug.candidaturas_lidas = base.length;
   if (!base.length) {
     return jsonWithOptionalDebug(
-      { rows: [], vagasAtivas, page, pageSize, hasMore: false },
+      { rows: [], vagasAtivas, page, pageSize, hasMore: false, summaryCounts },
       debug,
       { headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=30" } }
     );
@@ -225,7 +277,7 @@ async function handleCandidatosListGet(request: Request) {
   debug.linhas_unicas_final = uniqueRows.length;
 
   return jsonWithOptionalDebug(
-    { rows: uniqueRows, vagasAtivas, page, pageSize, hasMore: base.length >= pageSize },
+    { rows: uniqueRows, vagasAtivas, page, pageSize, hasMore: base.length >= pageSize, summaryCounts },
     debug,
     { headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=30" } }
   );

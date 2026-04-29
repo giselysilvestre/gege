@@ -365,7 +365,9 @@ function CandidatoPerfilInner() {
   const clienteSlug = String(params.clienteSlug ?? "");
   const vagaId = searchParams.get("vaga");
 
-  const backHref = vagaId ? `/vagas/${encodeURIComponent(vagaId)}` : `/${clienteSlug}/candidatos`;
+  const backHref = vagaId
+    ? `/${clienteSlug}/vagas/${encodeURIComponent(vagaId)}`
+    : `/${clienteSlug}/candidatos`;
 
   const [acoesMenuOpen, setAcoesMenuOpen] = useState(false);
   const acoesMenuRef = useRef<HTMLDivElement>(null);

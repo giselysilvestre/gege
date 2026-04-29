@@ -15,6 +15,14 @@ import { getClienteBySlug } from '@/lib/getClienteBySlug'
 import { useClienteSlug } from '@/lib/context/ClienteSlugContext'
 
 type SortKey = "candidato" | "score" | "etapa" | "inscricao";
+type SummaryCounts = {
+  todos: number;
+  triagem: number;
+  entrevista: number;
+  teste: number;
+  contratado: number;
+  desistiu: number;
+};
 
 function stageCountPredicate(status: string, stage: "triagem" | "entrevista" | "teste" | "contratado" | "desistiu"): boolean {
   if (stage === "triagem") return status === "novo" || status === "em_triagem";
@@ -134,6 +142,7 @@ function CandidatosContent() {
   const [noCliente, setNoCliente] = useState(false);
   const [vagasAtivas, setVagasAtivas] = useState<Array<{ id: string; cargo: string; titulo_publicacao?: string | null }>>([]);
   const [rawRows, setRawRows] = useState<CandidatoInscricaoRow[]>([]);
+  const [summaryCounts, setSummaryCounts] = useState<SummaryCounts | null>(null);
   const [q, setQ] = useState("");
   const [selectedVagaIds, setSelectedVagaIds] = useState<string[]>(() => (vagaFromQuery ? [vagaFromQuery] : []));
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -168,6 +177,7 @@ function CandidatosContent() {
       const json = (await res.json()) as {
         rows?: CandidatoInscricaoRow[];
         vagasAtivas?: Array<{ id: string; cargo: string; titulo_publicacao?: string | null }>;
+        summaryCounts?: SummaryCounts;
         debug?: Record<string, unknown>;
         hasMore?: boolean;
         message?: string;
@@ -176,6 +186,7 @@ function CandidatosContent() {
         setNoCliente(res.status === 401);
         setRawRows([]);
         setVagasAtivas([]);
+        setSummaryCounts(null);
         setHasMore(false);
         setLoading(false);
         return;
@@ -183,11 +194,13 @@ function CandidatosContent() {
       setNoCliente(false);
       setRawRows(json.rows ?? []);
       setVagasAtivas(json.vagasAtivas ?? []);
+      setSummaryCounts(json.summaryCounts ?? null);
       setHasMore(Boolean(json.hasMore));
     } catch {
       setNoCliente(false);
       setRawRows([]);
       setVagasAtivas([]);
+      setSummaryCounts(null);
       setHasMore(false);
     }
     setLoading(false);
@@ -207,15 +220,16 @@ function CandidatosContent() {
   }, []);
 
   const stageCounts = useMemo(
-    () => ({
-      todos: rawRows.length,
-      triagem: rawRows.filter((r) => stageCountPredicate(r.status, "triagem")).length,
-      entrevista: rawRows.filter((r) => stageCountPredicate(r.status, "entrevista")).length,
-      teste: rawRows.filter((r) => stageCountPredicate(r.status, "teste")).length,
-      contratado: rawRows.filter((r) => stageCountPredicate(r.status, "contratado")).length,
-      desistiu: rawRows.filter((r) => stageCountPredicate(r.status, "desistiu")).length,
-    }),
-    [rawRows]
+    () =>
+      summaryCounts ?? {
+        todos: rawRows.length,
+        triagem: rawRows.filter((r) => stageCountPredicate(r.status, "triagem")).length,
+        entrevista: rawRows.filter((r) => stageCountPredicate(r.status, "entrevista")).length,
+        teste: rawRows.filter((r) => stageCountPredicate(r.status, "teste")).length,
+        contratado: rawRows.filter((r) => stageCountPredicate(r.status, "contratado")).length,
+        desistiu: rawRows.filter((r) => stageCountPredicate(r.status, "desistiu")).length,
+      },
+    [rawRows, summaryCounts]
   );
   const hasDistanceData = useMemo(() => rawRows.some((r) => r.distancia_km != null), [rawRows]);
 
