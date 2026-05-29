@@ -254,7 +254,7 @@ export default function CarreiraPage() {
 
       <div className="career-about mb24">
         <div className="fs11 fw7 muted" style={{ textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 10 }}>
-          Sobre nós
+          Descrição
         </div>
         <div style={{ fontSize: 14, color: "var(--gray-700)", lineHeight: 1.7 }}>
           {config?.carreira_sobre_texto?.trim() || cliente?.sobre?.trim() || cliente?.descricao?.trim() || `${nome} está contratando pessoas comprometidas e com vontade de crescer.`}

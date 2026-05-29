@@ -86,7 +86,7 @@ export default function CarreiraPublicaView({ data }: { data: CarreiraPublicaDat
 
       <div className="career-about mb24">
         <div className="fs11 fw7 muted" style={{ textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 10 }}>
-          Sobre nos
+          Descrição
         </div>
         <div style={{ fontSize: 14, color: "var(--gray-700)", lineHeight: 1.7 }}>
           {data.config?.carreira_sobre_texto?.trim() ||

@@ -385,9 +385,9 @@ export default function ConfiguracoesPage() {
       <div className="config-page-tabs">
         {(
           [
+            { key: "gerais" as const, label: "Página de Carreira", short: "Pág. carreira" },
             { key: "unidades" as const, label: "Unidades", short: "Unidades" },
             { key: "cargos" as const, label: "Cargos", short: "Cargos" },
-            { key: "gerais" as const, label: "Página de Carreira", short: "Pág. carreira" },
           ] as const
         ).map((t) => {
           const active = tab === t.key;
@@ -646,49 +646,6 @@ export default function ConfiguracoesPage() {
 
       {tab === "gerais" ? (
         <div style={{ display: "grid", gap: 16 }}>
-          <div
-            style={{
-              background: form.carreira_capa_url?.trim()
-                ? `url(${form.carreira_capa_url.trim()}) center / cover no-repeat`
-                : (form.cor_primaria?.trim() || "var(--berry)"),
-              borderRadius: 22,
-              color: form.carreira_texto_cor?.trim() || (previewTextColor === "dark" ? "#1f2937" : "#fff"),
-              padding: "28px 24px",
-              position: "relative",
-              overflow: "hidden",
-            }}
-          >
-            {form.logo_url?.trim() ? (
-              <img
-                src={form.logo_url.trim()}
-                alt="Logo da marca"
-                style={{ width: 44, height: 44, borderRadius: 12, objectFit: "cover", background: "rgba(255,255,255,0.65)", marginBottom: 12 }}
-              />
-            ) : (
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(255,255,255,0.18)", display: "grid", placeItems: "center", fontWeight: 800, marginBottom: 12 }}>
-                {initials || "GE"}
-              </div>
-            )}
-            <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.4 }}>{form.nome_marca?.trim() || "Nome da empresa"}</div>
-            <div style={{ fontSize: 13, opacity: 0.86, marginTop: 6, maxWidth: 640, lineHeight: 1.5 }}>
-              {form.carreira_trabalhe_texto?.trim() || "Frase curta (Sobre nós)…"}
-            </div>
-            {!form.carreira_capa_url?.trim() ? (
-              <div style={{ position: "absolute", top: -60, right: -30, width: 220, height: 220, borderRadius: "50%", background: "rgba(255,255,255,0.08)" }} />
-            ) : (
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  pointerEvents: "none",
-                  background: previewTextColor === "dark"
-                    ? "linear-gradient(180deg, rgba(255,255,255,0.32) 0%, rgba(255,255,255,0.16) 100%)"
-                    : "linear-gradient(180deg, rgba(16,24,40,0.30) 0%, rgba(16,24,40,0.16) 100%)",
-                }}
-              />
-            )}
-          </div>
-
           <div className="card" style={{ display: "grid", gap: 12 }}>
             <div className="fw7 fs15">Informações gerais</div>
             <div className="grid-2" style={{ gap: 12 }}>
@@ -720,30 +677,86 @@ export default function ConfiguracoesPage() {
               </div>
             </div>
             <div style={{ display: "grid", gap: 6 }}>
-              <label className="fs11 fw7 muted" style={{ textTransform: "uppercase" }}>Sobre nós</label>
+              <label className="fs11 fw7 muted" style={{ textTransform: "uppercase" }} htmlFor="cfg-carreira-sobre-nos">
+                Sobre nós
+              </label>
               <textarea
+                id="cfg-carreira-sobre-nos"
                 className="search-input"
                 rows={2}
-                placeholder="Frase curta no topo da página (abaixo de “Trabalhe com a gente”)"
+                placeholder="Frase curta — aparece no topo, abaixo de “Trabalhe com a gente”"
                 value={form.carreira_trabalhe_texto ?? ""}
                 onChange={(e) => setForm((p) => ({ ...p, carreira_trabalhe_texto: e.target.value }))}
               />
-              <p className="fs12 c500" style={{ margin: 0 }}>
-                Aparece no banner principal da página de carreira.
-              </p>
             </div>
             <div style={{ display: "grid", gap: 6 }}>
-              <label className="fs11 fw7 muted" style={{ textTransform: "uppercase" }}>Descrição</label>
+              <label className="fs11 fw7 muted" style={{ textTransform: "uppercase" }} htmlFor="cfg-carreira-descricao">
+                Descrição
+              </label>
               <textarea
+                id="cfg-carreira-descricao"
                 className="search-input"
                 rows={6}
-                placeholder="Texto longo na seção “Sobre nós” da página pública"
+                placeholder="Texto longo — aparece no card “Descrição”, abaixo do banner"
                 value={form.carreira_sobre_texto ?? ""}
                 onChange={(e) => setForm((p) => ({ ...p, carreira_sobre_texto: e.target.value }))}
               />
-              <p className="fs12 c500" style={{ margin: 0 }}>
-                Aparece no card branco abaixo do banner.
-              </p>
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: form.carreira_capa_url?.trim()
+                ? `url(${form.carreira_capa_url.trim()}) center / cover no-repeat`
+                : (form.cor_primaria?.trim() || "var(--berry)"),
+              borderRadius: 22,
+              color: form.carreira_texto_cor?.trim() || (previewTextColor === "dark" ? "#1f2937" : "#fff"),
+              padding: "28px 24px",
+              position: "relative",
+              overflow: "hidden",
+            }}
+          >
+            <div className="fs11 fw7 muted" style={{ textTransform: "uppercase", marginBottom: 10, opacity: 0.85 }}>
+              Prévia do banner
+            </div>
+            {form.logo_url?.trim() ? (
+              <img
+                src={form.logo_url.trim()}
+                alt="Logo da marca"
+                style={{ width: 44, height: 44, borderRadius: 12, objectFit: "cover", background: "rgba(255,255,255,0.65)", marginBottom: 12 }}
+              />
+            ) : (
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(255,255,255,0.18)", display: "grid", placeItems: "center", fontWeight: 800, marginBottom: 12 }}>
+                {initials || "GE"}
+              </div>
+            )}
+            <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.4 }}>Trabalhe com a gente</div>
+            <div style={{ fontSize: 13, opacity: 0.86, marginTop: 6, maxWidth: 640, lineHeight: 1.5 }}>
+              {form.carreira_trabalhe_texto?.trim() || "Sobre nós (frase curta)…"}
+            </div>
+            {!form.carreira_capa_url?.trim() ? (
+              <div style={{ position: "absolute", top: -60, right: -30, width: 220, height: 220, borderRadius: "50%", background: "rgba(255,255,255,0.08)" }} />
+            ) : (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  pointerEvents: "none",
+                  background: previewTextColor === "dark"
+                    ? "linear-gradient(180deg, rgba(255,255,255,0.32) 0%, rgba(255,255,255,0.16) 100%)"
+                    : "linear-gradient(180deg, rgba(16,24,40,0.30) 0%, rgba(16,24,40,0.16) 100%)",
+                }}
+              />
+            )}
+          </div>
+
+          <div className="card" style={{ display: "grid", gap: 10, padding: 18 }}>
+            <div className="fs11 fw7 muted" style={{ textTransform: "uppercase" }}>Prévia da descrição</div>
+            <div className="fs11 fw7 muted" style={{ textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              Descrição
+            </div>
+            <div style={{ fontSize: 14, color: "var(--gray-700)", lineHeight: 1.7 }}>
+              {form.carreira_sobre_texto?.trim() || "Descrição (texto longo)…"}
             </div>
           </div>
 
