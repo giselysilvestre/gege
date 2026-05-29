@@ -671,7 +671,7 @@ export default function ConfiguracoesPage() {
             )}
             <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.4 }}>{form.nome_marca?.trim() || "Nome da empresa"}</div>
             <div style={{ fontSize: 13, opacity: 0.86, marginTop: 6, maxWidth: 640, lineHeight: 1.5 }}>
-              {form.carreira_trabalhe_texto?.trim() || "Descrição da empresa..."}
+              {form.carreira_trabalhe_texto?.trim() || "Frase curta (Sobre nós)…"}
             </div>
             {!form.carreira_capa_url?.trim() ? (
               <div style={{ position: "absolute", top: -60, right: -30, width: 220, height: 220, borderRadius: "50%", background: "rgba(255,255,255,0.08)" }} />
@@ -720,8 +720,30 @@ export default function ConfiguracoesPage() {
               </div>
             </div>
             <div style={{ display: "grid", gap: 6 }}>
+              <label className="fs11 fw7 muted" style={{ textTransform: "uppercase" }}>Sobre nós</label>
+              <textarea
+                className="search-input"
+                rows={2}
+                placeholder="Frase curta no topo da página (abaixo de “Trabalhe com a gente”)"
+                value={form.carreira_trabalhe_texto ?? ""}
+                onChange={(e) => setForm((p) => ({ ...p, carreira_trabalhe_texto: e.target.value }))}
+              />
+              <p className="fs12 c500" style={{ margin: 0 }}>
+                Aparece no banner principal da página de carreira.
+              </p>
+            </div>
+            <div style={{ display: "grid", gap: 6 }}>
               <label className="fs11 fw7 muted" style={{ textTransform: "uppercase" }}>Descrição</label>
-              <textarea className="search-input" rows={3} value={form.carreira_trabalhe_texto ?? ""} onChange={(e) => setForm((p) => ({ ...p, carreira_trabalhe_texto: e.target.value }))} />
+              <textarea
+                className="search-input"
+                rows={6}
+                placeholder="Texto longo na seção “Sobre nós” da página pública"
+                value={form.carreira_sobre_texto ?? ""}
+                onChange={(e) => setForm((p) => ({ ...p, carreira_sobre_texto: e.target.value }))}
+              />
+              <p className="fs12 c500" style={{ margin: 0 }}>
+                Aparece no card branco abaixo do banner.
+              </p>
             </div>
           </div>
 
@@ -792,7 +814,6 @@ export default function ConfiguracoesPage() {
                 </label>
               </div>
             </div>
-            <input className="search-input" placeholder="Sobre nós (texto da página de carreira)" value={form.carreira_sobre_texto ?? ""} onChange={(e) => setForm((p) => ({ ...p, carreira_sobre_texto: e.target.value }))} />
             <div className="fs12 c500">Preview atual: {carreiraUrlPreview}</div>
             {uploadingField ? <div className="fs12 c500">Enviando imagem...</div> : null}
             <div className="flex aic g8" style={{ justifyContent: "flex-end" }}>
