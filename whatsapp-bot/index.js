@@ -7,13 +7,32 @@ const { WhatsAppClient } = require("@kapso/whatsapp-cloud-api");
 const pdfParse = require("pdf-parse/lib/pdf-parse.js");
 const Groq = require("groq-sdk");
 const { SYSTEM_PROMPT_BASE } = require("./ana-prompt");
+const {
+  expandKapsoWebhookBodies,
+  extractKapsoInboundFromPayload,
+  phoneNumberIdMatchesConfigured,
+  normalizeE164Digits: normalizeE164DigitsKapso,
+} = require("./webhook-kapso");
+const { linhasBeneficiosFromJson } = require("./beneficios-vaga");
 dotenv.config();
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+let groqClient = null;
+function getGroqClient() {
+  const key = process.env.GROQ_API_KEY;
+  if (!key) return null;
+  if (!groqClient) groqClient = new Groq({ apiKey: key });
+  return groqClient;
+}
 
 const PORT = Number(process.env.PORT || 3333);
 const KAPSO_PHONE_NUMBER_ID = process.env.KAPSO_PHONE_NUMBER_ID || "";
-const APP_VERSION = "candidatura-etapa-interesse-v1-2026-04-27";
+const APP_VERSION = "webhook-kapso-v2-batch-2026-06-04";
+
+const MENSAGEM_SEM_AGENDAMENTO =
+  "obrigada por responder! vou encaminhar seu perfil pro time do cliente analisar. se você for selecionado pra próxima etapa, o próprio time entra em contato com você — eu não marco entrevista por aqui. qualquer dúvida, pode mandar mensagem.";
+
+const MENSAGEM_CANDIDATO_PERGUNTA_ENTREVISTA =
+  "quem define data, horário e local de entrevista é o time da empresa, não eu. assim que tiverem retorno sobre seu perfil, eles te avisam. não consigo agendar nem confirmar horário por aqui.";
 
 const MAX_HISTORY_MESSAGES = 20;
 
@@ -42,63 +61,21 @@ const kapsoClient = new WhatsAppClient({
 
 const SYSTEM_PROMPT = SYSTEM_PROMPT_BASE;
 
-/**
- * Extrai dados do webhook Kapso v2 (event whatsapp.message.received).
- */
-function extractKapsoInbound(req) {
-  const payload = req.body;
-  const headerEvent = req.headers["x-webhook-event"];
-  const bodyEvent = payload?.event;
-
-  if (headerEvent !== "whatsapp.message.received" && bodyEvent !== "whatsapp.message.received") {
-    return { skip: true, reason: "wrong_event" };
-  }
-
-  const msg = payload?.message;
-  if (!msg) return { skip: true, reason: "no_message" };
-
-  if (msg.kapso?.direction !== "inbound") {
-    return { skip: true, reason: "not_inbound" };
-  }
-
-  if (msg.type !== "text" || !msg.text?.body) {
-    const tiposSuportados = ["audio", "document", "image"];
-    if (tiposSuportados.includes(msg.type) && msg.kapso?.has_media) {
-      return {
-        skip: false,
-        from: msg.from,
-        to: normalizeE164Digits(msg.from),
-        text: null,
-        type: msg.type,
-        msg,
-        conversationId: payload?.conversation?.id,
-        phoneNumberId: payload?.conversation?.phone_number_id || payload?.phone_number_id,
-      };
-    }
-    console.log("[webhook] mensagem não-texto recebida:", JSON.stringify(msg, null, 2));
-    return { skip: true, reason: "not_supported" };
-  }
-
-  const conversationId = payload?.conversation?.id;
-  const from = msg.from;
-  const text = String(msg.text.body).trim();
-  const phoneNumberId = payload?.conversation?.phone_number_id || payload?.phone_number_id;
-
-  if (!conversationId || !from || !text) {
-    return { skip: true, reason: "missing_fields" };
-  }
-
-  return {
-    skip: false,
-    conversationId,
-    to: normalizeE164Digits(from),
-    text,
-    phoneNumberId,
-  };
+function normalizeE164Digits(phone) {
+  return normalizeE164DigitsKapso(phone);
 }
 
-function normalizeE164Digits(phone) {
-  return String(phone).replace(/\D/g, "");
+/** Vincula conversation_id da Kapso à sessão ativa (disparo costuma não trazer esse id). */
+async function linkKapsoConversationToActiveSession(candidatoId, conversationId) {
+  if (!candidatoId || !conversationId) return;
+  const { error } = await supabase
+    .from("whatsapp_sessoes")
+    .update({ kapso_session_id: conversationId })
+    .eq("candidato_id", candidatoId)
+    .eq("status", "ativo");
+  if (error) {
+    console.error("[webhook] erro ao vincular kapso_session_id:", error.message);
+  }
 }
 
 function formatBrPhoneFromDigits(phoneDigits) {
@@ -372,13 +349,15 @@ async function montarContextoVaga(candidaturaId) {
     clienteNome = clienteViaUnidade?.nome_empresa || "";
   }
 
+  const beneficios_linhas = linhasBeneficiosFromJson(b);
+
   return {
     cliente_nome: clienteNome,
     cargo: v.cargo || "",
     unidade_nome: u?.nome || "",
     salario: v.salario ? Number(v.salario).toFixed(2).replace(".", ",") : "",
-    bonus_meta: b.bonus_meta || "",
-    vale_alimentacao: b.vale_alimentacao != null ? String(b.vale_alimentacao) : "",
+    beneficios_json: b,
+    beneficios_linhas,
     endereco_linha: u?.endereco_linha || "",
     bairro: u?.bairro || "",
     cidade: u?.cidade || "",
@@ -580,20 +559,23 @@ function montarMensagemApresentacaoVaga(contextoVaga) {
     return "me dá um minuto que vou confirmar os detalhes da vaga com o time";
   }
 
-  return [
+  const benefLines =
+    contextoVaga.beneficios_linhas?.length > 0
+      ? contextoVaga.beneficios_linhas
+      : linhasBeneficiosFromJson(contextoVaga.beneficios_json);
+
+  const bloco = [
     `Que ótimo! é uma vaga pra ${contextoVaga.cliente_nome}:`,
     `🧑‍🍳 ${contextoVaga.cargo} — ${contextoVaga.unidade_nome}`,
     `💰 Salário: R$ ${contextoVaga.salario}`,
-    `🎯 Bônus por meta: R$ ${contextoVaga.bonus_meta} (além do salário)`,
-    `🍽️ Vale Alimentação: R$ ${contextoVaga.vale_alimentacao}`,
-    "🚌 Vale Transporte",
-    "💊 Plano de Saúde",
-    "📈 Plano de Carreira",
+    ...benefLines,
     `📍 ${contextoVaga.endereco_linha}, ${contextoVaga.bairro} — ${contextoVaga.cidade}/${contextoVaga.uf}`,
     `🕐 Escala ${contextoVaga.escala} (${contextoVaga.horario})`,
     "",
     "você tem interesse pela vaga?",
-  ].join("\n");
+  ];
+
+  return bloco.join("\n");
 }
 
 function normalizarTextoRespostaCurta(s) {
@@ -627,16 +609,113 @@ function detectaNaoInteresseVaga(texto) {
   );
 }
 
+function inferirEtapaPorMensagemAna(etapaAtual, assistantMessage) {
+  const t = normalizarTextoRespostaCurta(assistantMessage);
+  if (!t) return null;
+
+  if (
+    t.includes("vou te fazer algumas perguntas rapidas") ||
+    t.includes("te conhecer melhor") ||
+    t.includes("me conta sobre seu ultimo emprego")
+  ) {
+    return "mini_entrevista";
+  }
+
+  if (
+    t.includes("vou passar seu perfil") ||
+    t.includes("encaminhar seu perfil") ||
+    t.includes("nao marco entrevista")
+  ) {
+    return "encerramento";
+  }
+
+  if (
+    t.includes("boa sorte") ||
+    t.includes("fico a disposicao se surgir algo no futuro") ||
+    t.includes("nao vou mais te contactar")
+  ) {
+    if (
+      etapaAtual === "mini_entrevista" ||
+      etapaAtual === "agendamento_entrevista" ||
+      etapaAtual === "encerramento"
+    ) {
+      return "encerramento";
+    }
+  }
+
+  return null;
+}
+
+function mensagemTentaAgendarEntrevista(texto) {
+  const t = normalizarTextoRespostaCurta(texto);
+  if (!t) return false;
+  if (t.includes("nao marco entrevista") || t.includes("nao agendo entrevista")) return false;
+
+  const padroes = [
+    /\b(agend|marcar|marquei|remarcar).{0,40}\bentrevist/,
+    /\bentrevist.{0,40}\b(agend|marcar|remarc)/,
+    /\bconsegui\b.{0,30}\b(agendar|marcar)\b/,
+    /\bentrevista\b.{0,25}\b(amanha|hoje|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b/,
+    /\b(amanha|hoje|segunda|terca|quarta|quinta|sexta)\b.{0,25}\b(as|a)\s*\d{1,2}\s*h\b/,
+    /\bentrevista\b.{0,20}\b(as|a)\s*\d{1,2}\s*h\b/,
+    /\bconfirmad[oa].{0,30}\b(as|a)\s*\d{1,2}\s*h\b/,
+    /\bhorari[oa]s?\s+disponiveis\b/,
+    /\bte espero\b.{0,30}\b(entrevista|loja|endereco)\b/,
+    /\bcomparec/,
+    /\bvolto aqui pra marcar uma entrevista presencial\b/,
+    /\bentrevista presencial com voce\b/,
+    /\bquerem marcar a entrevista presencial\b/,
+  ];
+  return padroes.some((re) => re.test(t));
+}
+
+function candidatoPerguntaAgendamento(texto) {
+  const t = normalizarTextoRespostaCurta(texto);
+  if (!t) return false;
+  return (
+    /\b(que dia|qual dia|que horario|qual horario|que hora|qual hora)\b/.test(t) &&
+    /\b(entrevist|marcar|agend)\b/.test(t)
+  );
+}
+
+function sanitizarMensagemAna(etapaAtual, userMessage, assistantMessage) {
+  const msg = String(assistantMessage || "").trim();
+  const user = normalizarTextoRespostaCurta(userMessage);
+  const etapa = normalizarTextoRespostaCurta(etapaAtual || "");
+
+  if (candidatoPerguntaAgendamento(userMessage)) {
+    return MENSAGEM_CANDIDATO_PERGUNTA_ENTREVISTA;
+  }
+
+  if (mensagemTentaAgendarEntrevista(msg)) {
+    console.warn("[ana] bloqueio agendamento de entrevista:", msg.slice(0, 120));
+    return MENSAGEM_SEM_AGENDAMENTO;
+  }
+
+  // Evita alucinação de "fala do candidato" em primeira pessoa pela Ana.
+  if (
+    etapa === "mini_entrevista" &&
+    /^(trabalhei|meu desligamento|eu lido|eu trabalhei)\b/i.test(msg)
+  ) {
+    return "perfeito. me conta sobre seu último emprego, como foi trabalhar lá e por que você saiu?";
+  }
+
+  // Quando candidato responde algo como "tanto faz", Ana deve apenas conduzir pergunta.
+  if (etapa === "mini_entrevista" && /forma como preferir|tanto faz|como preferir/.test(user)) {
+    return "perfeito. me conta sobre seu último emprego, como foi trabalhar lá e por que você saiu?";
+  }
+
+  return msg;
+}
+
 async function sendWhatsAppMessage(toDigits, message) {
   const phoneNumberId = process.env.KAPSO_PHONE_NUMBER_ID;
   const apiKey = process.env.KAPSO_API_KEY;
 
   if (!apiKey || !phoneNumberId) {
-    console.error("[kapso] KAPSO_API_KEY ou KAPSO_PHONE_NUMBER_ID não configurados");
-    return;
+    throw new Error("KAPSO_API_KEY ou KAPSO_PHONE_NUMBER_ID não configurados no servidor");
   }
 
-  // Doc Kapso: POST .../meta/whatsapp/v24.0/{phone_number_id}/messages
   const url = `https://api.kapso.ai/meta/whatsapp/v24.0/${phoneNumberId}/messages`;
   const body = {
     messaging_product: "whatsapp",
@@ -646,19 +725,15 @@ async function sendWhatsAppMessage(toDigits, message) {
   };
 
   console.log("[kapso] enviando para URL:", url);
-  console.log("[kapso] body:", JSON.stringify(body));
 
-  try {
-    const response = await axios.post(url, body, {
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": apiKey,
-      },
-    });
-    console.log("[kapso] mensagem enviada, status:", response.status);
-  } catch (err) {
-    console.error("[kapso] erro ao enviar:", err?.response?.status, JSON.stringify(err?.response?.data));
-  }
+  const response = await axios.post(url, body, {
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": apiKey,
+    },
+  });
+  console.log("[kapso] mensagem enviada, status:", response.status);
+  return response.data;
 }
 
 async function sendKapsoMessage(toDigits, message) {
@@ -684,6 +759,11 @@ async function processarMidia(msg, phoneNumberId, candidatoId) {
     console.log("[processarMidia] buffer size:", buffer.length);
 
     if (tipo === "audio") {
+      const groq = getGroqClient();
+      if (!groq) {
+        console.error("[processarMidia] GROQ_API_KEY ausente — áudio não transcrito");
+        return null;
+      }
       const transcricao = await groq.audio.transcriptions.create({
         file: new File([buffer], "audio.ogg", { type: "audio/ogg" }),
         model: "whisper-large-v3",
@@ -968,7 +1048,11 @@ async function getGeResponse(candidatoId, userMessage) {
       .replace(/\{\{vaga\.cidade\}\}/g, contextoVaga.cidade)
       .replace(/\{\{vaga\.uf\}\}/g, contextoVaga.uf)
       .replace(/\{\{vaga\.escala\}\}/g, contextoVaga.escala)
-      .replace(/\{\{vaga\.horario\}\}/g, contextoVaga.horario);
+      .replace(/\{\{vaga\.horario\}\}/g, contextoVaga.horario)
+      .replace(
+        /\{\{vaga\.beneficios_linhas\}\}/g,
+        (contextoVaga.beneficios_linhas || []).join("\n")
+      );
   } else {
     systemPromptDinamico = systemPromptDinamico.replace(/\{\{vaga\.[^}]+\}\}/g, "");
   }
@@ -1014,11 +1098,20 @@ async function getGeResponse(candidatoId, userMessage) {
     messages: history,
   });
 
-  const assistantMessage = response.content
+  const rawAssistantMessage = response.content
     .filter((b) => b.type === "text")
     .map((b) => b.text)
     .join("\n")
     .trim();
+  const assistantMessage = sanitizarMensagemAna(etapaAtualPrompt, userMessage, rawAssistantMessage);
+
+  const etapaInferida = inferirEtapaPorMensagemAna(etapaAtualPrompt, assistantMessage);
+  if (etapaInferida) {
+    await supabase
+      .from("whatsapp_sessoes")
+      .update({ etapa_atual: etapaInferida })
+      .eq("id", sessaoId);
+  }
 
   // 13. Registra outbound e atualiza ultima_outbound_at
   await saveMessageEvent({
@@ -1032,10 +1125,7 @@ async function getGeResponse(candidatoId, userMessage) {
     .update({ ultima_outbound_at: new Date().toISOString() })
     .eq("id", sessaoId);
 
-  if (
-    tipoFluxoAtual === "candidatura" &&
-    ["mini_entrevista", "agendamento_entrevista", "encerramento"].includes(etapaAtualPrompt)
-  ) {
+  if (tipoFluxoAtual === "candidatura") {
     await atualizarScorePosEntrevista(candidatoId, sessaoId);
   }
 
@@ -1060,91 +1150,153 @@ function consumeIdempotencyKey(req, res) {
 }
 
 app.get("/health", (_req, res) => {
-  res.status(200).json({ ok: true });
+  res.status(200).json({
+    ok: true,
+    version: APP_VERSION,
+    kapso_phone_configured: Boolean(KAPSO_PHONE_NUMBER_ID),
+    supabase_configured: Boolean(
+      process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+    ),
+  });
 });
+
+async function queueInboundForProcessing(extracted) {
+  const { conversationId, to, text, phoneNumberId, type, msg } = extracted;
+
+  if (text === "ping-verificacao-integracao") {
+    console.log("[webhook] ping de verificação (sem resposta automática)");
+    return { ok: true, ping: true };
+  }
+
+  console.log(`[webhook] inbound ${to} conv=${conversationId || "—"} texto=${text || `[${type}]`}`);
+
+  const candidatoId =
+    (conversationId ? await resolveCandidatoIdByConversation(conversationId) : null) ||
+    (await resolveCandidatoIdByPhone(to));
+
+  if (!candidatoId) {
+    console.error("[webhook] candidato não encontrado para telefone", to);
+    await sendKapsoMessage(
+      to,
+      "oi! recebi sua mensagem — estou com uma instabilidade no cadastro. pode mandar seu nome completo?"
+    );
+    return { ok: false, reason: "no_candidato" };
+  }
+
+  if (conversationId) {
+    await linkKapsoConversationToActiveSession(candidatoId, conversationId);
+  }
+
+  let textoFinal = text;
+  if (!textoFinal && (type === "audio" || type === "document" || type === "image")) {
+    textoFinal = await processarMidia(msg, phoneNumberId || KAPSO_PHONE_NUMBER_ID, candidatoId);
+    if (!textoFinal) {
+      await sendKapsoMessage(
+        to,
+        "não consegui processar esse arquivo. pode mandar em texto ou tentar de novo?"
+      );
+      return { ok: true, media_unparsed: true };
+    }
+  }
+
+  const chave = to;
+  if (pendingMessages.has(chave)) {
+    clearTimeout(pendingMessages.get(chave).timer);
+    pendingMessages.get(chave).texts.push(textoFinal);
+  } else {
+    pendingMessages.set(chave, { texts: [textoFinal], timer: null });
+  }
+
+  pendingMessages.get(chave).timer = setTimeout(async () => {
+    const textoAgregado = pendingMessages.get(chave).texts.join(" ");
+    pendingMessages.delete(chave);
+    try {
+      const resposta = await getGeResponse(candidatoId, textoAgregado);
+      await sendKapsoMessage(to, resposta);
+    } catch (err) {
+      console.error("[webhook] erro ao processar mensagem agregada:", err.message || err);
+    }
+  }, 3000);
+
+  return { ok: true };
+}
 
 app.post("/webhook", async (req, res) => {
   try {
-    console.log("[webhook] payload recebido:", JSON.stringify(req.body, null, 2));
     if (!consumeIdempotencyKey(req, res)) return;
-    const messageId = req.body?.message?.id;
-    if (messageId) {
-      if (processedIdempotencyKeys.has(messageId)) {
-        console.log("[webhook] duplicata ignorada (message.id):", messageId);
-        return res.status(200).json({ ok: true, duplicate: true });
+
+    const expanded = expandKapsoWebhookBodies(req.headers, req.body);
+    if (expanded.skipReason) {
+      console.log("[webhook] ignorado:", expanded.skipReason, "event=", expanded.eventType);
+      return res.status(200).json({ ok: true, skipped: expanded.skipReason });
+    }
+
+    const results = [];
+    for (const itemPayload of expanded.items) {
+      const messageId = itemPayload?.message?.id;
+      if (messageId) {
+        if (processedIdempotencyKeys.has(messageId)) {
+          console.log("[webhook] duplicata ignorada (message.id):", messageId);
+          results.push({ duplicate: true });
+          continue;
+        }
+        processedIdempotencyKeys.add(messageId);
+        if (processedIdempotencyKeys.size > IDEMPOTENCY_CACHE_MAX) {
+          processedIdempotencyKeys.clear();
+        }
       }
-      processedIdempotencyKeys.add(messageId);
-      if (processedIdempotencyKeys.size > IDEMPOTENCY_CACHE_MAX) {
-        processedIdempotencyKeys.clear();
+
+      const extracted = extractKapsoInboundFromPayload(itemPayload);
+      if (extracted.skip) {
+        console.log("[webhook] item ignorado:", extracted.reason, extracted.messageType || "");
+        results.push({ skipped: extracted.reason });
+        continue;
       }
-    }
 
-    const extracted = extractKapsoInbound(req);
-    if (extracted.skip) {
-      return res.status(200).json({ ok: true, skipped: extracted.reason });
-    }
-
-    const { conversationId, to, text, phoneNumberId, type, msg } = extracted;
-
-    if (
-      KAPSO_PHONE_NUMBER_ID &&
-      phoneNumberId &&
-      phoneNumberId !== KAPSO_PHONE_NUMBER_ID
-    ) {
-      console.log("[webhook] phone_number_id diferente do configurado, ignorando");
-      return res.status(200).json({ ok: true, skipped: "phone_number_mismatch" });
-    }
-
-    if (!to) {
-      return res.status(200).json({ ok: true, skipped: "invalid_to" });
-    }
-
-    console.log("[webhook] payload bruto:", JSON.stringify(req.body, null, 2));
-    console.log(`[webhook] conversa ${conversationId} de ${to}: ${text}`);
-
-    // Prioridade: quando existir conversationId da Kapso, usa o vínculo da sessão.
-    // Isso evita ambiguidades quando o mesmo telefone está cadastrado em mais de um candidato.
-    const candidatoId =
-      (await resolveCandidatoIdByConversation(conversationId)) ||
-      (await resolveCandidatoIdByPhone(to));
-    let textoFinal = text;
-
-    if (!textoFinal && (type === "audio" || type === "document" || type === "image")) {
-      textoFinal = await processarMidia(msg, phoneNumberId, candidatoId);
-      if (!textoFinal) {
-        await sendKapsoMessage(to, "não consegui processar esse arquivo. pode mandar em texto ou tentar de novo?");
-        return res.status(200).json({ ok: true });
+      if (
+        !phoneNumberIdMatchesConfigured(extracted.phoneNumberId, KAPSO_PHONE_NUMBER_ID)
+      ) {
+        console.error(
+          "[webhook] phone_number_id divergente — inbound=",
+          extracted.phoneNumberId,
+          "env=",
+          KAPSO_PHONE_NUMBER_ID
+        );
+        results.push({ skipped: "phone_number_mismatch" });
+        continue;
       }
+
+      const r = await queueInboundForProcessing(extracted);
+      results.push(r);
     }
 
-    const chave = to;
-    if (pendingMessages.has(chave)) {
-      clearTimeout(pendingMessages.get(chave).timer);
-      pendingMessages.get(chave).texts.push(textoFinal);
-    } else {
-      pendingMessages.set(chave, { texts: [textoFinal], timer: null });
-    }
-
-    pendingMessages.get(chave).timer = setTimeout(async () => {
-      const textoAgregado = pendingMessages.get(chave).texts.join(" ");
-      pendingMessages.delete(chave);
-      try {
-        const resposta = await getGeResponse(candidatoId, textoAgregado);
-        await sendKapsoMessage(to, resposta);
-      } catch (err) {
-        console.error("[webhook] erro ao processar mensagem agregada:", err);
-      }
-    }, 3000);
-
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({ ok: true, processed: results.length, results });
   } catch (err) {
     console.error("[webhook] ERRO NÃO CAPTURADO:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`[whatsapp-bot] rodando em http://localhost:${PORT}`);
-  console.log("[whatsapp-bot] webhook em POST /webhook (Kapso v2)");
+function validateStartupEnv() {
+  const required = [
+    "KAPSO_API_KEY",
+    "KAPSO_PHONE_NUMBER_ID",
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "ANTHROPIC_API_KEY",
+  ];
+  const missing = required.filter((k) => !process.env[k] || !String(process.env[k]).trim());
+  if (missing.length) {
+    console.error("[startup] VARIÁVEIS OBRIGATÓRIAS AUSENTES:", missing.join(", "));
+    console.error("[startup] O bot sobe, mas webhook/disparo vão falhar até corrigir no Railway.");
+  } else {
+    console.log("[startup] variáveis críticas OK (Kapso + Supabase + Anthropic)");
+  }
+}
+
+app.listen(PORT, "0.0.0.0", () => {
+  validateStartupEnv();
+  console.log(`[whatsapp-bot] rodando em 0.0.0.0:${PORT}`);
+  console.log("[whatsapp-bot] webhook POST /webhook (Kapso v2 + batch)");
   console.log(`[whatsapp-bot] version=${APP_VERSION}`);
 });

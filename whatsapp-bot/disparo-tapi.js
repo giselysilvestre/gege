@@ -4,15 +4,26 @@
  * Script de disparo outbound do template abordagem_candidatura_gege.
  *
  * Uso (via Railway CLI pra pegar env vars do projeto):
- *   railway run node whatsapp-bot/disparo-tapi.js --vaga=<uuid> [--dry-run] [--limit=N]
+ *   railway run node whatsapp-bot/disparo-tapi.js --vaga=<uuid> [opções]
+ *
+ * Piloto com candidatos reais (recomendado):
+ *   1) --dry-run → vê quem entra (nome, telefone, id da candidatura)
+ *   2) dispara 1 pessoa: --limit=1 OU --candidatura=<uuid> OU --candidato=<uuid>
  *
  * Flags:
- *   --dry-run  → lista candidatos que seriam disparados, sem enviar
- *   --limit=N  → limita a N candidatos (útil pra teste)
+ *   --dry-run       → lista candidatos que seriam disparados, sem enviar
+ *   --limit=N       → no máximo N pessoas (ordem = resultado da query)
+ *   --candidatura=  → só essa candidatura (precisa ser elegível)
+ *   --candidato=    → só esse candidato_id (precisa ser elegível p/ essa vaga)
+ *   --status=novo|any  → por padrão filtra status=novo; use any para ignorar status
+ *   --score-min=N      → nota mínima em score_ia (padrão 75)
+ *   --fit=Alto|Médio|Baixo|any  → fit exigido (padrão Alto)
+ *   --ignorar-disponivel → não exige candidato.disponivel=true
  */
 
 require("dotenv").config();
 const { createClient } = require("@supabase/supabase-js");
+const axios = require("axios");
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -41,6 +52,13 @@ const args = process.argv.slice(2).reduce((acc, arg) => {
 const VAGA_ID = args.vaga;
 const DRY_RUN = !!args["dry-run"];
 const LIMIT = args.limit ? parseInt(args.limit, 10) : null;
+const CANDIDATURA_ID = args.candidatura || null;
+const CANDIDATO_ID = args.candidato || null;
+const STATUS_FILTER = (args.status || "novo").toLowerCase();
+const SCORE_MIN = args["score-min"] ? Number(args["score-min"]) : 75;
+const FIT_FILTER_RAW = args.fit || "Alto";
+const FIT_FILTER = String(FIT_FILTER_RAW).toLowerCase();
+const IGNORAR_DISPONIVEL = !!args["ignorar-disponivel"];
 
 if (!VAGA_ID) {
   console.error("❌ Faltou --vaga=<uuid>");
@@ -57,7 +75,8 @@ function normalizeE164Digits(raw) {
 }
 
 async function sendKapsoTemplate({ to, nome, cargo }) {
-  const url = `https://api.kapso.ai/meta/whatsapp/${KAPSO_PHONE_NUMBER_ID}/messages`;
+  // URL exata: /meta/whatsapp/v24.0/{phoneNumberId}/messages
+  const url = `https://api.kapso.ai/meta/whatsapp/v24.0/${KAPSO_PHONE_NUMBER_ID}/messages`;
   const body = {
     messaging_product: "whatsapp",
     to,
@@ -76,19 +95,23 @@ async function sendKapsoTemplate({ to, nome, cargo }) {
       ],
     },
   };
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${KAPSO_API_KEY}`,
-    },
-    body: JSON.stringify(body),
-  });
-  const json = await res.json();
-  if (!res.ok) {
-    throw new Error(`Kapso erro ${res.status}: ${JSON.stringify(json)}`);
+
+  console.log("[kapso] POST:", url);
+  console.log("[kapso] body:", JSON.stringify(body));
+
+  try {
+    const response = await axios.post(url, body, {
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": KAPSO_API_KEY,
+      },
+    });
+    return response.data;
+  } catch (err) {
+    const status = err?.response?.status;
+    const data = err?.response?.data;
+    throw new Error(`Kapso erro ${status}: ${JSON.stringify(data)}`);
   }
-  return json;
 }
 
 async function main() {
@@ -96,7 +119,7 @@ async function main() {
 
   const { data: vaga, error: vagaErr } = await supabase
     .from("vagas")
-    .select("id, cargo, status_vaga, cliente_id")
+    .select("id, cargo, titulo_publicacao, status_vaga, cliente_id")
     .eq("id", VAGA_ID)
     .maybeSingle();
 
@@ -108,37 +131,51 @@ async function main() {
     console.error(`❌ Vaga não está aberta (status=${vaga.status_vaga})`);
     process.exit(1);
   }
-  console.log(`✅ Vaga: ${vaga.cargo}`);
+  const cargoTemplate = (vaga.titulo_publicacao || vaga.cargo || "vaga").trim();
+  console.log(`✅ Vaga: ${cargoTemplate}`);
 
-  const { data: candidaturas, error: candErr } = await supabase
+  let candidaturasQuery = supabase
     .from("candidaturas")
     .select(
-      `id, candidato_id, score_compatibilidade,
+      `id, candidato_id, score_compatibilidade, status,
        candidato:candidatos(id, nome, telefone, disponivel,
-         analise:candidatos_analise(score_ia, fit_food_service))`
+         analise:candidatos_analise(score_ia, score_final, fit_food_service))`
     )
-    .eq("vaga_id", VAGA_ID)
-    .eq("status", "novo");
+    .eq("vaga_id", VAGA_ID);
+  if (STATUS_FILTER !== "any") {
+    candidaturasQuery = candidaturasQuery.eq("status", STATUS_FILTER);
+  }
+  const { data: candidaturas, error: candErr } = await candidaturasQuery;
 
   if (candErr) {
     console.error("❌ Erro ao buscar candidaturas:", candErr);
     process.exit(1);
   }
 
-  console.log(`📋 ${candidaturas.length} candidaturas em status=novo`);
+  console.log(
+    `📋 ${candidaturas.length} candidaturas (${STATUS_FILTER === "any" ? "todos os status" : `status=${STATUS_FILTER}`})`
+  );
 
   const elegiveis = candidaturas.filter((c) => {
     const analiseRaw = c.candidato?.analise;
     const analise = Array.isArray(analiseRaw) ? analiseRaw[0] : analiseRaw;
     const telefone = c.candidato?.telefone;
+    const notaConsiderada = Number(analise?.score_final ?? analise?.score_ia);
+    const disponivel = c.candidato?.disponivel === true;
     return (
-      c.candidato?.disponivel === true &&
+      (IGNORAR_DISPONIVEL || disponivel) &&
       telefone &&
-      analise?.score_ia >= 75 &&
-      analise?.fit_food_service === "Alto"
+      Number.isFinite(notaConsiderada) &&
+      notaConsiderada >= SCORE_MIN &&
+      (FIT_FILTER === "any" ||
+        String(analise?.fit_food_service || "")
+          .toLowerCase()
+          .trim() === FIT_FILTER)
     );
   });
-  console.log(`✅ ${elegiveis.length} elegíveis`);
+  console.log(
+    `✅ ${elegiveis.length} elegíveis (nota>=${SCORE_MIN}${FIT_FILTER === "any" ? "" : `, fit=${FIT_FILTER_RAW}`}${IGNORAR_DISPONIVEL ? ", ignorando disponivel" : ""})`
+  );
 
   const candidatoIds = elegiveis.map((c) => c.candidato_id);
   let comSessaoAtiva = new Set();
@@ -162,8 +199,29 @@ async function main() {
   console.log(`✅ ${paraDisparar.length} para disparar`);
   console.log(`⏭️  ${pulados.length} pulados (já têm sessão ativa)`);
 
-  const lista = LIMIT ? paraDisparar.slice(0, LIMIT) : paraDisparar;
-  if (LIMIT) console.log(`🔢 Limit=${LIMIT}, disparando ${lista.length}`);
+  let lista = paraDisparar;
+  if (CANDIDATURA_ID) {
+    lista = paraDisparar.filter((c) => c.id === CANDIDATURA_ID);
+    console.log(`🎯 Filtrado por --candidatura=${CANDIDATURA_ID}: ${lista.length} resultado(s)`);
+    if (lista.length === 0) {
+      console.error("❌ Nenhuma candidatura bateu com o id (pode estar fora dos critérios de elegibilidade)");
+      process.exit(1);
+    }
+  }
+  if (CANDIDATO_ID) {
+    lista = lista.filter((c) => c.candidato_id === CANDIDATO_ID);
+    console.log(`🎯 Filtrado por --candidato=${CANDIDATO_ID}: ${lista.length} resultado(s)`);
+    if (lista.length === 0) {
+      console.error(
+        "❌ Nenhum candidato elegível com esse id para esta vaga (filtros de status/score/fit/telefone/sessão ativa)"
+      );
+      process.exit(1);
+    }
+  }
+  if (LIMIT) {
+    lista = lista.slice(0, LIMIT);
+    console.log(`🔢 Limit=${LIMIT}, disparando ${lista.length}`);
+  }
 
   if (DRY_RUN) {
     console.log("\n🔍 DRY RUN — lista que seria disparada:");
@@ -207,7 +265,7 @@ async function main() {
       const resp = await sendKapsoTemplate({
         to: telefoneE164,
         nome: primeiroNome,
-        cargo: vaga.cargo,
+        cargo: cargoTemplate,
       });
 
       console.log(`[kapso resp] ${nome}:`, JSON.stringify(resp).slice(0, 300));
@@ -215,13 +273,21 @@ async function main() {
       const kapsoMessageId =
         resp?.messages?.[0]?.id || resp?.message?.id || resp?.id || null;
       const kapsoSessionId =
-        resp?.conversation?.id || resp?.session_id || resp?.conversation_id || null;
+        resp?.conversation?.id ||
+        resp?.conversation_id ||
+        resp?.session_id ||
+        resp?.kapso?.conversation_id ||
+        null;
 
       if (kapsoSessionId) {
         await supabase
           .from("whatsapp_sessoes")
           .update({ kapso_session_id: kapsoSessionId })
           .eq("id", sessao.id);
+      } else {
+        console.warn(
+          `[disparo] ${nome}: resposta Kapso sem conversation.id — o vínculo será feito no primeiro inbound`
+        );
       }
 
       await supabase.from("whatsapp_eventos").insert({
@@ -231,7 +297,7 @@ async function main() {
         tipo_midia: "texto",
         tipo_mensagem: "template",
         etapa_roteiro: "disparo_template",
-        conteudo: `[template:${TEMPLATE_NAME}] nome=${primeiroNome}, cargo=${vaga.cargo}`,
+        conteudo: `[template:${TEMPLATE_NAME}] nome=${primeiroNome}, cargo=${cargoTemplate}`,
         processado_pela_ia: false,
         espera_resposta: true,
         kapso_message_id: kapsoMessageId,
