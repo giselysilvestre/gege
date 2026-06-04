@@ -46,8 +46,14 @@ function extractKapsoInboundFromPayload(payload) {
   const msg = payload?.message;
   if (!msg) return { skip: true, reason: "no_message" };
 
-  if (msg.kapso?.direction && msg.kapso.direction !== "inbound") {
+  const direction = String(msg.kapso?.direction || msg.direction || "").toLowerCase();
+  if (direction && direction !== "inbound") {
     return { skip: true, reason: "not_inbound" };
+  }
+
+  const status = String(msg.kapso?.status || msg.status || "").toLowerCase();
+  if (status === "sent" || status === "delivered" || status === "read") {
+    return { skip: true, reason: "outbound_status" };
   }
 
   const conversationId = payload?.conversation?.id || null;
