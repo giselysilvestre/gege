@@ -2,6 +2,7 @@ const express = require("express");
 const axios = require("axios");
 const dotenv = require("dotenv");
 const { createClient } = require("@supabase/supabase-js");
+const WebSocket = require("ws");
 const Anthropic = require("@anthropic-ai/sdk");
 const { WhatsAppClient } = require("@kapso/whatsapp-cloud-api");
 const pdfParse = require("pdf-parse/lib/pdf-parse.js");
@@ -47,7 +48,10 @@ const pendingMessages = new Map();
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
   process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-  { auth: { persistSession: false, autoRefreshToken: false } }
+  {
+    auth: { persistSession: false, autoRefreshToken: false },
+    realtime: { transport: WebSocket },
+  }
 );
 
 const anthropic = new Anthropic({
