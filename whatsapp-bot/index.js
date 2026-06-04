@@ -18,10 +18,7 @@ const {
   isKnownOutboundKapsoMessageId,
   isEchoOfRecentCrmOutbound,
 } = require("./inbound-guards");
-const { linhasBeneficiosFromJson, formatFaixaPosContrato } = require("./beneficios-vaga");
-const { calcularTempoDeslocamento } = require("./distance-matrix");
-const { processarFluxoRecusa } = require("./recusa-motivo");
-const { dispararFeedbackReprovacao } = require("./feedback-reprovacao");
+const { linhasBeneficiosFromJson } = require("./beneficios-vaga");
 dotenv.config();
 
 let groqClient = null;
@@ -330,7 +327,7 @@ async function montarContextoVaga(candidaturaId) {
     .from("vagas")
     .select(
       `id, cliente_id, unidade_id, cargo, salario, escala, horario, beneficios_json,
-       unidade:cliente_unidades(id, nome, cep, endereco_linha, bairro, cidade, uf),
+       unidade:cliente_unidades(id, nome, endereco_linha, bairro, cidade, uf),
        cliente:clientes(id, nome_empresa)`
     )
     .eq("id", cand.vaga_id)
@@ -367,14 +364,12 @@ async function montarContextoVaga(candidaturaId) {
     cargo: v.cargo || "",
     unidade_nome: u?.nome || "",
     salario: v.salario ? Number(v.salario).toFixed(2).replace(".", ",") : "",
-    revisao_salarial: formatFaixaPosContrato(b),
     beneficios_json: b,
     beneficios_linhas,
     endereco_linha: u?.endereco_linha || "",
     bairro: u?.bairro || "",
     cidade: u?.cidade || "",
     uf: u?.uf || "",
-    cep_unidade: u?.cep || "",
     escala: v.escala || "",
     horario: v.horario || "",
   };
@@ -581,9 +576,6 @@ function montarMensagemApresentacaoVaga(contextoVaga) {
     `Que ótimo! é uma vaga pra ${contextoVaga.cliente_nome}:`,
     `🧑‍🍳 ${contextoVaga.cargo} — ${contextoVaga.unidade_nome}`,
     `💰 Salário: R$ ${contextoVaga.salario}`,
-    ...(contextoVaga.revisao_salarial
-      ? [`📈 Revisão salarial (pós-contrato): R$ ${contextoVaga.revisao_salarial}`]
-      : []),
     ...benefLines,
     `📍 ${contextoVaga.endereco_linha}, ${contextoVaga.bairro} — ${contextoVaga.cidade}/${contextoVaga.uf}`,
     `🕐 Escala ${contextoVaga.escala} (${contextoVaga.horario})`,
@@ -999,45 +991,14 @@ async function getGeResponse(candidatoId, userMessage) {
   if (foco?.etapa_atual === "disparo_template" && foco?.candidatura_id) {
     updates.etapa_atual = "apresentacao_vaga";
   }
-
-  let recusaFluxo = processarFluxoRecusa(foco?.etapa_atual, userMessage);
-  if (!recusaFluxo && foco?.etapa_atual === "apresentacao_vaga" && detectaSimInteresseVaga(userMessage)) {
-    updates.etapa_atual = "confirma_endereco";
-  }
-
-  if (recusaFluxo?.updates) {
-    Object.assign(updates, recusaFluxo.updates);
-  }
-
-  await supabase.from("whatsapp_sessoes").update(updates).eq("id", sessaoId);
-
-  const feedbackDeps = {
-    sendMessage: (to, text) => sendWhatsAppMessage(to, text),
-    registrarOutbound: async (sid, cid, text) => {
-      await saveMessageEvent({ sessaoId: sid, candidatoId: cid, direcao: "outbound", conteudo: text });
-      await supabase
-        .from("whatsapp_sessoes")
-        .update({ ultima_outbound_at: new Date().toISOString() })
-        .eq("id", sid);
-    },
-  };
-
-  if (recusaFluxo?.skipClaude && recusaFluxo.resposta) {
-    if (recusaFluxo.feedbackTipo) {
-      await dispararFeedbackReprovacao(supabase, feedbackDeps, sessaoId, recusaFluxo.feedbackTipo);
+  if (foco?.etapa_atual === "apresentacao_vaga") {
+    if (detectaSimInteresseVaga(userMessage)) {
+      updates.etapa_atual = "confirma_endereco";
+    } else if (detectaNaoInteresseVaga(userMessage)) {
+      updates.etapa_atual = "encerramento";
     }
-    await saveMessageEvent({
-      sessaoId,
-      candidatoId,
-      direcao: "outbound",
-      conteudo: recusaFluxo.resposta,
-    });
-    await supabase
-      .from("whatsapp_sessoes")
-      .update({ ultima_outbound_at: new Date().toISOString() })
-      .eq("id", sessaoId);
-    return recusaFluxo.resposta;
   }
+  await supabase.from("whatsapp_sessoes").update(updates).eq("id", sessaoId);
 
   // 5. Busca dados do candidato e análise
   let candidato = null;
@@ -1063,29 +1024,10 @@ async function getGeResponse(candidatoId, userMessage) {
   // 6. Define estado efetivo para o prompt já refletir transição de etapa no mesmo turno
   const candidaturaFocoId = foco?.candidatura_id || null;
   const tipoFluxoAtual = foco?.tipo_fluxo || (candidaturaFocoId ? "candidatura" : "reativo");
-  const etapaAtualDb = updates.etapa_atual || foco?.etapa_atual || "abertura";
-  const etapaAtualPrompt =
-    etapaAtualDb === "confirma_endereco"
-      ? "confirma_deslocamento"
-      : etapaAtualDb === "aguardando_motivo_recusa"
-        ? "aguardando_motivo_recusa"
-        : etapaAtualDb;
+  const etapaAtualPrompt = updates.etapa_atual || foco?.etapa_atual || "abertura";
 
   // 7. Monta contexto da vaga em foco (se houver candidatura vinculada)
   const contextoVaga = candidaturaFocoId ? await montarContextoVaga(candidaturaFocoId) : null;
-
-  const cepCandidato = candidato?.cep ? String(candidato.cep).trim() : "";
-  let tempoDeslocamentoMin = "";
-  if (cepCandidato && contextoVaga?.cep_unidade) {
-    tempoDeslocamentoMin = await calcularTempoDeslocamento(cepCandidato, contextoVaga.cep_unidade);
-  }
-
-  console.log("[getGeResponse] contexto prompt:", {
-    etapaAtualDb,
-    etapaAtualPrompt,
-    cep_candidato: cepCandidato || "(vazio)",
-    tempo_deslocamento_min: tempoDeslocamentoMin || "(vazio)",
-  });
 
   // 8. Injeta placeholders no system prompt
   let systemPromptDinamico = SYSTEM_PROMPT
@@ -1098,8 +1040,6 @@ async function getGeResponse(candidatoId, userMessage) {
     .replace(/\{\{fit_food_service\}\}/g, analise?.fit_food_service || "não avaliado")
     .replace(/\{\{ultima_experiencia\}\}/g, analise?.ultima_experiencia || "não informada")
     .replace(/\{\{disponibilidade_horario\}\}/g, analise?.disponibilidade_horario || "não informada")
-    .replace(/\{\{cep_candidato\}\}/g, cepCandidato || "")
-    .replace(/\{\{tempo_deslocamento_min\}\}/g, tempoDeslocamentoMin || "")
     .replace(/\{\{tipo_fluxo\}\}/g, tipoFluxoAtual)
     .replace(/\{\{etapa_atual\}\}/g, etapaAtualPrompt);
 
@@ -1136,7 +1076,7 @@ async function getGeResponse(candidatoId, userMessage) {
   // 10. Só neste turno (vindo do template): texto fixo da vaga. Depois do "sim" inicial a etapa já é apresentacao_vaga no BD — não repetir o bloco.
   if (
     tipoFluxoAtual === "candidatura" &&
-    etapaAtualDb === "apresentacao_vaga" &&
+    etapaAtualPrompt === "apresentacao_vaga" &&
     foco?.etapa_atual === "disparo_template"
   ) {
     const assistantMessage = montarMensagemApresentacaoVaga(contextoVaga);
