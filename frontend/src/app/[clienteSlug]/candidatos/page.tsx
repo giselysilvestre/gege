@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { normalizePercentScore } from "@/lib/score";
+import { displayScoreEntrevista, normalizePercentScore } from "@/lib/score";
 import type { CandidatoInscricaoRow } from "./ui/CandidatoInscricaoCard";
 import { ALLOWED_CANDIDATE_TAGS, toAllowedCandidateTags } from "@/lib/candidate-tags";
 import { CandidatosFiltersBar } from "./ui/CandidatosFiltersBar";
@@ -14,7 +14,7 @@ import { ActiveFilterChips } from "@/components/ui/ActiveFilterChips";
 import { getClienteBySlug } from '@/lib/getClienteBySlug'
 import { useClienteSlug } from '@/lib/context/ClienteSlugContext'
 
-type SortKey = "candidato" | "score" | "etapa" | "inscricao";
+type SortKey = "candidato" | "score" | "score_entrevista" | "etapa" | "inscricao";
 type SummaryCounts = {
   todos: number;
   triagem: number;
@@ -257,6 +257,11 @@ function CandidatosContent() {
       let cmp = 0;
       if (sortBy === "candidato") cmp = a.candidato.nome.localeCompare(b.candidato.nome, "pt");
       if (sortBy === "score") cmp = (normalizePercentScore(a.score ?? a.candidato.score) ?? -1) - (normalizePercentScore(b.score ?? b.candidato.score) ?? -1);
+      if (sortBy === "score_entrevista") {
+        cmp =
+          (displayScoreEntrevista(a.score_entrevista) ?? -1) -
+          (displayScoreEntrevista(b.score_entrevista) ?? -1);
+      }
       if (sortBy === "etapa") cmp = (stageRank[a.status] ?? -1) - (stageRank[b.status] ?? -1);
       if (sortBy === "inscricao") {
         const ta = a.enviado_em ? new Date(a.enviado_em).getTime() : 0;
@@ -471,7 +476,13 @@ function CandidatosContent() {
                     >
                       Score CV {sortArrow(sortBy, sortDir, "score")}
                     </th>
-                    <th title="Score da entrevista por WhatsApp (0–100).">Score Ent</th>
+                    <th
+                      className="sortable"
+                      title="Score da entrevista por WhatsApp (0–100)."
+                      onClick={() => onSort("score_entrevista")}
+                    >
+                      Score Ent {sortArrow(sortBy, sortDir, "score_entrevista")}
+                    </th>
                     <th>Tags</th>
                     <th className="sortable" onClick={() => onSort("etapa")}>Etapa {sortArrow(sortBy, sortDir, "etapa")}</th>
                     <th className="sortable" onClick={() => onSort("inscricao")}>Inscrição {sortArrow(sortBy, sortDir, "inscricao")}</th>
@@ -485,7 +496,7 @@ function CandidatosContent() {
                     const insc = dt && Number.isFinite(dt.getTime()) ? dt.toLocaleDateString("pt-BR") : "—";
                     const mergedTags = tagsDaLinha(r).slice(0, 4);
                     const sc = normalizePercentScore(r.score ?? r.candidato.score);
-                    const scEnt = normalizePercentScore(r.score_entrevista);
+                    const scEnt = displayScoreEntrevista(r.score_entrevista);
                     const age = idadeDe(r.candidato.data_nascimento ?? null);
                     const loc = [age != null ? `${age}a` : null, cidadeUf(r.candidato.cidade), fmtKm(r.distancia_km)].filter(Boolean).join(" · ");
                     const exp = (r.candidato.exp_resumo?.trim() || "").split(/\n|[;|]/)[0]?.trim() || buildExperienciaResumoLinha(r.candidato) || "—";
@@ -547,7 +558,7 @@ function CandidatosContent() {
               const ep = etapaPill(r.status);
               const mergedTags = tagsDaLinha(r).slice(0, 4);
               const sc = normalizePercentScore(r.score ?? r.candidato.score);
-              const scEnt = normalizePercentScore(r.score_entrevista);
+              const scEnt = displayScoreEntrevista(r.score_entrevista);
               const age = idadeDe(r.candidato.data_nascimento ?? null);
               const loc = [age != null ? `${age}a` : null, cidadeUf(r.candidato.cidade), fmtKm(r.distancia_km)].filter(Boolean).join(" · ");
               const nextEtapa = nextLabel(r.status);

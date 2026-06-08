@@ -17,6 +17,13 @@ export function normalizePercentScore(raw: number | string | null | undefined): 
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
+/** Score pós-entrevista para exibição: sem entrevista (null ou 0) → não mostrar na UI. */
+export function displayScoreEntrevista(raw: number | string | null | undefined): number | null {
+  const n = normalizePercentScore(raw);
+  if (n == null || n <= 0) return null;
+  return n;
+}
+
 /**
  * Score de compatibilidade candidato↔vaga: valor em candidaturas.score_compatibilidade.
  */

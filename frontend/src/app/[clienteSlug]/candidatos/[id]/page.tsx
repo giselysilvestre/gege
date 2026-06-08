@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSupabaseBrowser } from "@/lib/supabase/useSupabaseBrowser";
-import { normalizePercentScore } from "@/lib/score";
+import { displayScoreEntrevista, normalizePercentScore } from "@/lib/score";
 import { vagaTituloPublico } from "@/lib/vaga-display";
 import { devError } from "@/lib/devLog";
 
@@ -201,14 +201,14 @@ function cvScoreForDisplay(a: CandidatoAnalise | null): number | null {
 
 function entrevistaScoreForDisplay(a: CandidatoAnalise | null): number | null {
   if (!a) return null;
-  return normalizePercentScore(a.score_pos_entrevista);
+  return displayScoreEntrevista(a.score_pos_entrevista);
 }
 
 /** Só quando há IA + pós-entrevista: mostrar combinado (usa coluna ou fórmula). */
 function combinedAnaliseScoreForDisplay(a: CandidatoAnalise | null): number | null {
   if (!a) return null;
   const ia = normalizePercentScore(a.score_ia);
-  const pos = normalizePercentScore(a.score_pos_entrevista);
+  const pos = displayScoreEntrevista(a.score_pos_entrevista);
   if (ia == null || pos == null) return null;
   const db = normalizePercentScore(a.score_final);
   if (db != null) return db;

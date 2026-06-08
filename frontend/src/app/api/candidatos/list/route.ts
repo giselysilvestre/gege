@@ -15,8 +15,10 @@ const ENRICHED_COLUMNS =
   "candidatura_id,vaga_id,cliente_id,status,enviado_em,atualizado_em,distancia_km,tags_candidatura,candidato_id,candidato_nome,candidato_telefone,candidato_bairro,candidato_cidade,candidato_data_nascimento,candidato_situacao_emprego,vaga_cargo,vaga_titulo_publicacao,score_ia_atual,tags_analise,ultima_experiencia";
 
 function normalizeScoreEntrevista(raw: unknown): number | null {
+  if (raw == null || raw === "") return null;
   const n = Number(raw);
-  return Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : null;
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.max(0, Math.min(100, Math.round(n)));
 }
 
 /** Só incluir objeto `debug` nas respostas quando explicitamente ligado (evita vazar estrutura interna em produção). */
