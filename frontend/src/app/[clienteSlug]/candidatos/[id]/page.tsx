@@ -193,14 +193,15 @@ function etapaPill(status: string): { className: string; label: string } {
   }
 }
 
-/** Número do círculo "Score IA": sempre o score de currículo (score_ia), não score_final. */
-function cvIaScoreForDisplay(a: CandidatoAnalise | null): number | null {
+/** Score do currículo (score_ia) — não mistura com entrevista. */
+function cvScoreForDisplay(a: CandidatoAnalise | null): number | null {
   if (!a) return null;
-  const ia = normalizePercentScore(a.score_ia);
-  if (ia != null) return ia;
-  const pos = normalizePercentScore(a.score_pos_entrevista);
-  if (pos != null) return pos;
-  return normalizePercentScore(a.score_final);
+  return normalizePercentScore(a.score_ia);
+}
+
+function entrevistaScoreForDisplay(a: CandidatoAnalise | null): number | null {
+  if (!a) return null;
+  return normalizePercentScore(a.score_pos_entrevista);
 }
 
 /** Só quando há IA + pós-entrevista: mostrar combinado (usa coluna ou fórmula). */
@@ -470,7 +471,8 @@ function CandidatoPerfilInner() {
     return () => document.removeEventListener("pointerdown", onDocPointerDown, true);
   }, [acoesMenuOpen]);
 
-  const displayIaScore = useMemo(() => cvIaScoreForDisplay(analise), [analise]);
+  const displayCvScore = useMemo(() => cvScoreForDisplay(analise), [analise]);
+  const displayEntrevistaScore = useMemo(() => entrevistaScoreForDisplay(analise), [analise]);
   const displayCombinedAnaliseScore = useMemo(() => combinedAnaliseScoreForDisplay(analise), [analise]);
 
   const distStr = formatDistanciaKm(candidatura?.distancia_km ?? null);
@@ -508,7 +510,8 @@ function CandidatoPerfilInner() {
   const historicoProcesso = useMemo(() => {
     if (!candidatura) return [];
     const rows: { date: string; text: string; dot: "" | "berry" | "gray" }[] = [];
-    const ia = cvIaScoreForDisplay(analise);
+    const cv = cvScoreForDisplay(analise);
+    const ent = entrevistaScoreForDisplay(analise);
     if (candidatura.enviado_em) {
       rows.push({
         date: formatTsPt(candidatura.enviado_em),
@@ -516,10 +519,17 @@ function CandidatoPerfilInner() {
         dot: "",
       });
     }
-    if (ia != null) {
+    if (cv != null) {
       rows.push({
         date: formatTsPt(analise?.processado_em ?? candidatura.enviado_em),
-        text: `Análise IA (currículo) — score ${ia}`,
+        text: `Score CV — ${cv}`,
+        dot: "berry",
+      });
+    }
+    if (ent != null) {
+      rows.push({
+        date: formatTsPt(candidatura.atualizado_em ?? analise?.processado_em ?? candidatura.enviado_em),
+        text: `Score entrevista (WhatsApp) — ${ent}`,
         dot: "berry",
       });
     }
@@ -735,19 +745,28 @@ function CandidatoPerfilInner() {
                         </div>
                       </div>
                       <div className="cand-profile-head-aside">
-                        <div className="cand-score-block">
-                          <div className={`${scoreCircleClass(displayIaScore)} cand-score-mobile-subtle`}>
-                            {displayIaScore != null ? displayIaScore : "—"}
-                          </div>
-                          <div className="cand-score-label">Score IA</div>
-                          <div className="cand-score-hint">Currículo / análise automática</div>
-                          {displayCombinedAnaliseScore != null ? (
-                            <div className="cand-score-combined">
-                              Final (IA + entrevista)
-                              <strong>{displayCombinedAnaliseScore}</strong>
+                        <div className="flex g10" style={{ justifyContent: "center", flexWrap: "wrap" }}>
+                          <div className="cand-score-block">
+                            <div className={`${scoreCircleClass(displayCvScore)} cand-score-mobile-subtle`}>
+                              {displayCvScore != null ? displayCvScore : "—"}
                             </div>
-                          ) : null}
+                            <div className="cand-score-label">Score CV</div>
+                            <div className="cand-score-hint">Currículo</div>
+                          </div>
+                          <div className="cand-score-block">
+                            <div className={`${scoreCircleClass(displayEntrevistaScore)} cand-score-mobile-subtle`}>
+                              {displayEntrevistaScore != null ? displayEntrevistaScore : "—"}
+                            </div>
+                            <div className="cand-score-label">Score Ent</div>
+                            <div className="cand-score-hint">Entrevista WhatsApp</div>
+                          </div>
                         </div>
+                        {displayCombinedAnaliseScore != null ? (
+                          <div className="cand-score-combined" style={{ marginTop: 4 }}>
+                            Final (CV + entrevista)
+                            <strong>{displayCombinedAnaliseScore}</strong>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </div>

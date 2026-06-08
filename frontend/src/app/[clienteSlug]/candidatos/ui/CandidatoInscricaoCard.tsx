@@ -18,6 +18,7 @@ export type CandidatoInscricaoRow = {
   cargo: string;
   tags?: string[] | null;
   score?: number | null;
+  score_entrevista?: number | null;
   distancia_km?: number | null;
   candidato: {
     id: string;

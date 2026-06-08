@@ -451,13 +451,14 @@ function CandidatosContent() {
             <div className="table-wrap">
               <table className="eq-table">
                 <colgroup>
-                  <col style={{ width: "14.285%" }} />
-                  <col style={{ width: "14.285%" }} />
-                  <col style={{ width: "14.285%" }} />
-                  <col style={{ width: "14.285%" }} />
-                  <col style={{ width: "14.285%" }} />
-                  <col style={{ width: "14.285%" }} />
-                  <col style={{ width: "14.285%" }} />
+                  <col style={{ width: "12.5%" }} />
+                  <col style={{ width: "12.5%" }} />
+                  <col style={{ width: "10%" }} />
+                  <col style={{ width: "10%" }} />
+                  <col style={{ width: "15%" }} />
+                  <col style={{ width: "12.5%" }} />
+                  <col style={{ width: "12.5%" }} />
+                  <col style={{ width: "15%" }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -465,11 +466,12 @@ function CandidatosContent() {
                     <th>Experiência</th>
                     <th
                       className="sortable"
-                      title="Score IA do currículo do candidato (0–100)."
+                      title="Score do currículo do candidato (0–100)."
                       onClick={() => onSort("score")}
                     >
-                      Score IA {sortArrow(sortBy, sortDir, "score")}
+                      Score CV {sortArrow(sortBy, sortDir, "score")}
                     </th>
+                    <th title="Score da entrevista por WhatsApp (0–100).">Score Ent</th>
                     <th>Tags</th>
                     <th className="sortable" onClick={() => onSort("etapa")}>Etapa {sortArrow(sortBy, sortDir, "etapa")}</th>
                     <th className="sortable" onClick={() => onSort("inscricao")}>Inscrição {sortArrow(sortBy, sortDir, "inscricao")}</th>
@@ -483,6 +485,7 @@ function CandidatosContent() {
                     const insc = dt && Number.isFinite(dt.getTime()) ? dt.toLocaleDateString("pt-BR") : "—";
                     const mergedTags = tagsDaLinha(r).slice(0, 4);
                     const sc = normalizePercentScore(r.score ?? r.candidato.score);
+                    const scEnt = normalizePercentScore(r.score_entrevista);
                     const age = idadeDe(r.candidato.data_nascimento ?? null);
                     const loc = [age != null ? `${age}a` : null, cidadeUf(r.candidato.cidade), fmtKm(r.distancia_km)].filter(Boolean).join(" · ");
                     const exp = (r.candidato.exp_resumo?.trim() || "").split(/\n|[;|]/)[0]?.trim() || buildExperienciaResumoLinha(r.candidato) || "—";
@@ -500,6 +503,7 @@ function CandidatosContent() {
                         </td>
                         <td className="c600 fs13">{exp || "—"}</td>
                         <td>{sc != null ? <div className={scoreClass(r.score ?? r.candidato.score)}>{Math.round(sc)}</div> : <span className="c400">—</span>}</td>
+                        <td>{scEnt != null ? <div className={scoreClass(scEnt)}>{Math.round(scEnt)}</div> : <span className="c400">—</span>}</td>
                         <td>
                           <div className="tag-row">
                             {mergedTags.map((t) => (
@@ -543,6 +547,7 @@ function CandidatosContent() {
               const ep = etapaPill(r.status);
               const mergedTags = tagsDaLinha(r).slice(0, 4);
               const sc = normalizePercentScore(r.score ?? r.candidato.score);
+              const scEnt = normalizePercentScore(r.score_entrevista);
               const age = idadeDe(r.candidato.data_nascimento ?? null);
               const loc = [age != null ? `${age}a` : null, cidadeUf(r.candidato.cidade), fmtKm(r.distancia_km)].filter(Boolean).join(" · ");
               const nextEtapa = nextLabel(r.status);
@@ -570,11 +575,16 @@ function CandidatosContent() {
                         <div className="cand-loc">{loc || "—"}</div>
                       </div>
                     </div>
-                    {sc != null ? (
-                      <span className={scoreClass(r.score ?? r.candidato.score)}>{Math.round(sc)}</span>
-                    ) : (
-                      <span className="c400 fs13">—</span>
-                    )}
+                    <div className="flex aic g6">
+                      {sc != null ? (
+                        <span className={scoreClass(r.score ?? r.candidato.score)} title="Score CV">{Math.round(sc)}</span>
+                      ) : (
+                        <span className="c400 fs13">—</span>
+                      )}
+                      {scEnt != null ? (
+                        <span className={scoreClass(scEnt)} title="Score Ent">{Math.round(scEnt)}</span>
+                      ) : null}
+                    </div>
                   </div>
                   <div style={{ marginTop: 10, fontSize: 13, color: "var(--n600)" }}>
                     <strong style={{ color: "var(--n900)" }}>Cargo:</strong> {r.cargo}

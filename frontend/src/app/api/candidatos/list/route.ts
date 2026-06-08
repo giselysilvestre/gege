@@ -14,6 +14,11 @@ export const dynamic = "force-dynamic";
 const ENRICHED_COLUMNS =
   "candidatura_id,vaga_id,cliente_id,status,enviado_em,atualizado_em,distancia_km,tags_candidatura,candidato_id,candidato_nome,candidato_telefone,candidato_bairro,candidato_cidade,candidato_data_nascimento,candidato_situacao_emprego,vaga_cargo,vaga_titulo_publicacao,score_ia_atual,tags_analise,ultima_experiencia";
 
+function normalizeScoreEntrevista(raw: unknown): number | null {
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : null;
+}
+
 /** Só incluir objeto `debug` nas respostas quando explicitamente ligado (evita vazar estrutura interna em produção). */
 const LIST_API_DEBUG =
   process.env.GEGE_API_DEBUG === "1" || process.env.GEGE_API_DEBUG === "true";
@@ -217,6 +222,39 @@ async function handleCandidatosListGet(request: Request) {
     }
   }
   debug.candidaturas_lidas = base.length;
+
+  const candidatoIds = [
+    ...new Set(
+      base
+        .map((row) => (row.candidato_id != null ? String(row.candidato_id) : ""))
+        .filter(Boolean)
+    ),
+  ];
+  const scoreEntrevistaByCandidato = new Map<string, number | null>();
+  if (candidatoIds.length > 0) {
+    const scoreEntFromRow = (row: Record<string, unknown>) =>
+      normalizeScoreEntrevista(row.score_pos_entrevista);
+    const hasScoreEntColumn = base.some((row) => row.score_pos_entrevista !== undefined);
+    if (hasScoreEntColumn) {
+      for (const row of base) {
+        const cid = row.candidato_id != null ? String(row.candidato_id) : "";
+        if (!cid) continue;
+        scoreEntrevistaByCandidato.set(cid, scoreEntFromRow(row));
+      }
+    } else {
+      const { data: scoreRows, error: scoreErr } = await supabase
+        .from("vw_candidato_score_ia_atual")
+        .select("candidato_id,score_pos_entrevista")
+        .in("candidato_id", candidatoIds);
+      if (scoreErr) debug.score_entrevista_error = scoreErr.message;
+      for (const row of (scoreRows as Array<Record<string, unknown>> | null) ?? []) {
+        const cid = row.candidato_id != null ? String(row.candidato_id) : "";
+        if (!cid) continue;
+        scoreEntrevistaByCandidato.set(cid, normalizeScoreEntrevista(row.score_pos_entrevista));
+      }
+    }
+  }
+
   if (!base.length) {
     return jsonWithOptionalDebug(
       { rows: [], vagasAtivas, page, pageSize, hasMore: false, summaryCounts },
@@ -230,6 +268,8 @@ async function handleCandidatosListGet(request: Request) {
       const scoreRaw = row.score_ia_atual;
       const scoreN = Number(scoreRaw);
       const scoreIa = Number.isFinite(scoreN) ? Math.max(0, Math.min(100, Math.round(scoreN))) : null;
+      const candidatoId = String(row.candidato_id);
+      const scoreEntrevista = scoreEntrevistaByCandidato.get(candidatoId) ?? null;
       return {
         candidaturaId: String(row.candidatura_id),
         vagaId: String(row.vaga_id),
@@ -244,6 +284,7 @@ async function handleCandidatosListGet(request: Request) {
           ...(Array.isArray(row.tags_analise) ? row.tags_analise.map((x: unknown) => String(x)) : []),
         ],
         score: scoreIa,
+        score_entrevista: scoreEntrevista,
         distancia_km:
           row.distancia_km != null && Number.isFinite(Number(row.distancia_km))
             ? Number(row.distancia_km)
