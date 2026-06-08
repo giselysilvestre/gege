@@ -69,6 +69,14 @@ const kapsoClient = new WhatsAppClient({
 
 const SYSTEM_PROMPT = SYSTEM_PROMPT_BASE;
 
+function inferirTipoCargo(cargo) {
+  const texto = (cargo || "").toLowerCase();
+  if (/\b(supervisor|supervisora|gerente|coordenador|coordenadora|líder|lider)\b/.test(texto)) {
+    return "lideranca";
+  }
+  return "operacional";
+}
+
 function normalizeE164Digits(phone) {
   return normalizeE164DigitsKapso(phone);
 }
@@ -1030,15 +1038,20 @@ async function getGeResponse(candidatoId, userMessage) {
   const contextoVaga = candidaturaFocoId ? await montarContextoVaga(candidaturaFocoId) : null;
 
   // 8. Injeta placeholders no system prompt
+  const cargoReferencia =
+    contextoVaga?.cargo || candidato?.cargo_principal || "";
+  const tipoCargo = inferirTipoCargo(cargoReferencia);
+
   let systemPromptDinamico = SYSTEM_PROMPT
     .replace(/\{\{nome\}\}/g, candidato?.nome || "não informado")
     .replace(/\{\{cargo_principal\}\}/g, candidato?.cargo_principal || "não informado")
+    .replace(/\{\{tipo_cargo\}\}/g, tipoCargo)
     .replace(/\{\{cidade\}\}/g, candidato?.cidade || "não informada")
+    .replace(/\{\{bairro\}\}/g, candidato?.bairro || "não informado")
     .replace(/\{\{situacao_emprego\}\}/g, candidato?.situacao_emprego || "não informada")
     .replace(/\{\{score_ia\}\}/g, analise?.score_ia?.toString() || "não calculado")
     .replace(/\{\{tags\}\}/g, analise?.tags?.join(", ") || "nenhuma")
     .replace(/\{\{fit_food_service\}\}/g, analise?.fit_food_service || "não avaliado")
-    .replace(/\{\{ultima_experiencia\}\}/g, analise?.ultima_experiencia || "não informada")
     .replace(/\{\{disponibilidade_horario\}\}/g, analise?.disponibilidade_horario || "não informada")
     .replace(/\{\{tipo_fluxo\}\}/g, tipoFluxoAtual)
     .replace(/\{\{etapa_atual\}\}/g, etapaAtualPrompt);
