@@ -4,6 +4,7 @@ export const ALLOWED_CANDIDATE_TAGS = [
   "lideranca",
   "alerta_instabilidade",
   "primeiro_emprego",
+  "acima_de_45",
 ] as const;
 
 export type AllowedCandidateTag = typeof ALLOWED_CANDIDATE_TAGS[number];
@@ -32,6 +33,7 @@ const TAG_ALIAS: Record<string, AllowedCandidateTag> = {
   instabilidade: "alerta_instabilidade",
   alta_rotatividade: "alerta_instabilidade",
   primeiro_emprego: "primeiro_emprego",
+  acima_de_45: "acima_de_45",
 };
 
 export function normalizeAllowedCandidateTag(raw: string | null | undefined): AllowedCandidateTag | null {
