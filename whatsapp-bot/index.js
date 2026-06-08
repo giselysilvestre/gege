@@ -45,8 +45,29 @@ const app = express();
 app.use(express.json({ limit: "2mb" }));
 
 /** Dedupe de retries do Kapso via header X-Idempotency-Key */
-const processedIdempotencyKeys = new Set();
-const IDEMPOTENCY_CACHE_MAX = 5000;
+const processedIdempotencyKeys = new Map();
+const IDEMPOTENCY_TTL_MS = 10 * 60 * 1000; // 10 minutos
+
+function idempotencyHas(key) {
+  const ts = processedIdempotencyKeys.get(key);
+  if (!ts) return false;
+  if (Date.now() - ts > IDEMPOTENCY_TTL_MS) {
+    processedIdempotencyKeys.delete(key);
+    return false;
+  }
+  return true;
+}
+
+function idempotencyAdd(key) {
+  processedIdempotencyKeys.set(key, Date.now());
+  if (processedIdempotencyKeys.size > 2000) {
+    const now = Date.now();
+    for (const [k, ts] of processedIdempotencyKeys) {
+      if (now - ts > IDEMPOTENCY_TTL_MS) processedIdempotencyKeys.delete(k);
+    }
+  }
+}
+
 const pendingMessages = new Map();
 
 const supabase = createClient(
@@ -413,32 +434,6 @@ async function loadConversationHistoryBySessao(sessaoId) {
   return mapped;
 }
 
-async function loadConversationHistory(candidatoId) {
-  const { data, error } = await supabase
-    .from("whatsapp_eventos")
-    .select("direcao,conteudo")
-    .eq("candidato_id", candidatoId)
-    .order("criado_em", { ascending: true });
-
-  if (error) {
-    console.error("[supabase] erro ao carregar histórico:", error);
-    return [];
-  }
-
-  const mapped = (data || [])
-    .map((event) => {
-      const role = event.direcao === "inbound" ? "user" : "assistant";
-      const content = typeof event.conteudo === "string" ? event.conteudo : "";
-      return { role, content };
-    })
-    .filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string");
-
-  if (mapped.length > MAX_HISTORY_MESSAGES) {
-    return mapped.slice(mapped.length - MAX_HISTORY_MESSAGES);
-  }
-  return mapped;
-}
-
 async function saveMessageEvent({ sessaoId, candidatoId, direcao, conteudo }) {
   const { error } = await supabase.from("whatsapp_eventos").insert({
     sessao_id: sessaoId,
@@ -474,60 +469,169 @@ function extrairJsonSeguro(texto) {
   }
 }
 
-async function atualizarScorePosEntrevista(candidatoId, sessaoId) {
+async function atualizarScorePosEntrevista(candidatoId, sessaoId, tipoCargo) {
   try {
+    const { data: sessao } = await supabase
+      .from("whatsapp_sessoes")
+      .select("etapa_atual")
+      .eq("id", sessaoId)
+      .maybeSingle();
+
+    if (!sessao || sessao.etapa_atual !== "encerramento") return;
+
     const historico = await loadConversationHistoryBySessao(sessaoId);
     if (!historico || historico.length === 0) return;
 
     const respostasCandidato = historico.filter((m) => m.role === "user" && m.content).length;
-    if (respostasCandidato < 4) return;
+    if (respostasCandidato < 3) return;
 
     const roteiroMini = [
       "me conta sobre seu último emprego",
-      "como você lida com imprevistos no trabalho",
-      "já teve situação no trabalho que você não concordou",
-      "como tá sua disponibilidade de horário e escala",
-      "me fala um pouco de você",
+      "quantas vezes você costuma faltar",
+      "como tá sua disponibilidade de horário",
+      "você já trabalhou em dia de pico",
+      "qual foi o pior perrengue ou situação com cliente",
+      "qual foi o pior perrengue ou situação que teve com um colaborador",
+      "na sua visão, quais são os processos mais importantes",
     ];
     const perguntasRoteiroRespondidas = roteiroMini.filter((trecho) =>
       historico.some(
-        (m) => m.role === "assistant" && m.content && m.content.toLowerCase().includes(trecho)
+        (m) =>
+          m.role === "assistant" &&
+          m.content &&
+          m.content.toLowerCase().includes(trecho)
       )
     ).length;
-    if (perguntasRoteiroRespondidas < 2) return;
+    if (perguntasRoteiroRespondidas < 3) return;
 
     const transcricao = historico
       .map((m) => `${m.role === "assistant" ? "ana" : "candidato"}: ${m.content}`)
       .join("\n");
 
-    const prompt = `Você é analista de recrutamento.
-Avalie a mini-entrevista abaixo e retorne APENAS JSON válido:
+    const cargo = tipoCargo || "operacional";
+    const isLideranca = cargo === "lideranca";
+
+    const guiaOperacional = `
+P1 — ÚLTIMO EMPREGO (0-20)
+Pergunta: "me conta sobre seu último emprego, o que você fazia no dia a dia e por que saiu?"
+Avaliar: experiência na função e motivo de saída legítimo.
+Boa (17-20): descreve 2+ atividades concretas, motivo de saída claro e limpo, ficou 6+ meses, experiência em food service.
+Média (10-16): descreve cargo mas função genérica, motivo vago sem red flag, menos de 6 meses com justificativa parcial.
+Ruim (0-9): não sabe descrever o que fazia, fala mal da empresa com rancor, ficou menos de 2 meses sem justificativa, motivo evasivo quando aprofundado, 3+ empregos curtos em sequência.
+Red flag eliminatório: indício de justa causa, contradição com perfil.
+
+P2 — PICO E PRESSÃO (0-20)
+Pergunta: "você já trabalhou em dia de pico, tipo sábado cheio ou véspera de feriado? como foi?"
+Avaliar: já viveu ritmo real de food service, reage com resiliência ou ansiedade.
+Boa (17-20): exemplo específico de pico, descreve como lidou, tom neutro ou positivo.
+Média (10-16): confirma experiência mas sem detalhe, ou sem food service mas com ambiente de alta demanda.
+Ruim (0-9): nunca trabalhou em pico + fallback genérico sem exemplo, ou demonstra aversão ao ritmo acelerado.
+
+P3 — CLIENTE DIFÍCIL (0-20)
+Pergunta: "qual foi o pior perrengue ou situação com cliente bravo que reclamou de algo? o que você fez pra resolver?"
+Avaliar: temperamento real, desescalou ou escalou, exemplo concreto.
+Boa (17-20): exemplo concreto, tomou iniciativa antes de chamar supervisor, situação controlada, tom calmo.
+Média (10-16): tem exemplo mas resolveu passivamente ou sem detalhe do resultado.
+Ruim (0-9): culpa o cliente, aplicou regra sem empatia, "nunca tive cliente difícil", resposta genérica sem exemplo.
+
+P4 — FALTAS E ATRASOS (0-20)
+Pergunta: "quantas vezes você costuma faltar ou se atrasar no mês? e, se acontece, como você costuma lidar com isso?"
+Avaliar: responde com número ou foge, avisa antes ou depois, naturaliza falta.
+Boa (17-20): número baixo com contexto crível, avisa antes, exemplo concreto de como avisou.
+Média (10-16): responsável no discurso mas sem número ("raramente", "só em caso de doença").
+Ruim (0-9): não responde quantas vezes, avisa no dia ou depois, naturaliza falta.
+Red flag eliminatório: "todo mundo falta, é normal" ou frequência declarada acima de 2x/mês.
+
+P5 — DISPONIBILIDADE (0-20)
+Pergunta: "como tá sua disponibilidade de horário e escala? tem alguma restrição?"
+Avaliar: compatibilidade real com a escala da vaga.
+Boa (17-20): disponibilidade total sem restrição, ou explica por que a escala funciona pra ela.
+Média (10-16): disponível mas com preferência contrária à escala (risco de desistência — registrar).
+Ruim/eliminatório (0): restrição real incompatível com a escala.`;
+
+    const guiaLideranca = `
+P1 — ÚLTIMO EMPREGO (0-20)
+Pergunta: "me conta sobre seu último emprego, o que você fazia no dia a dia e por que saiu?"
+Avaliar: experiência na função de gestão e motivo de saída legítimo.
+Boa (17-20): descreve cargo de gestão com escopo claro (equipe, processos), motivo de saída limpo, ficou 6+ meses.
+Média (10-16): descreve cargo mas função de gestão vaga, motivo impreciso sem red flag.
+Ruim (0-9): não descreve gestão de pessoas, fala mal com rancor, múltiplos empregos curtos sem explicação, indício de justa causa.
+
+P2 — CONFLITO COM COLABORADOR (0-20)
+Pergunta: "qual foi o pior perrengue ou situação que teve com um colaborador? o que você fez pra resolver?"
+Avaliar: exemplo real de gestão de conflito, resolveu ou evitou, postura de gestor.
+Boa (17-20): exemplo concreto com contexto, ação tomada com detalhes, consequência ou aprendizado, não culpa só o colaborador.
+Média (10-16): exemplo vago, ação correta mas sem detalhe do resultado.
+Ruim (0-9): "nunca tive conflito sério", culpa só o colaborador, resolveu evitando, resposta inteiramente genérica.
+
+P3 — VISÃO OPERACIONAL (0-20)
+Pergunta: "na sua visão, quais são os processos mais importantes pra uma loja funcionar bem?"
+Avaliar: visão operacional real, cita processos concretos, exemplo de como aplicava.
+Boa (17-20): cita 2+ processos específicos (escala, CMV, abertura/fechamento, treinamento, estoque, metas), com exemplo aplicado.
+Média (10-16): processos corretos mas genéricos, sem exemplo aplicado.
+Ruim (0-9): resposta abstrata sem processo operacional concreto, evidencia que nunca geriu loja de verdade.
+
+P4 — FALTAS E ATRASOS (0-20)
+[igual ao operacional]
+
+P5 — DISPONIBILIDADE (0-20)
+[igual ao operacional]`;
+
+    const guia = isLideranca ? guiaLideranca : guiaOperacional;
+
+    const prompt = `Você é analista de recrutamento especializado em food service.
+Avalie a mini-entrevista abaixo usando o guia de critérios fornecido.
+Retorne APENAS JSON válido, sem markdown.
+
+GUIA DE AVALIAÇÃO:
+${guia}
+
+REGRAS:
+- Avaliar cada pergunta com nota 0-20.
+- Se pergunta não foi feita ou não foi respondida: nota 0, marcar como "nao_respondida".
+- Red flag eliminatório em qualquer pergunta: score_pos_entrevista máximo 30.
+- Basear avaliação exclusivamente no que o candidato disse. Sem inferência.
+- Incluir trecho literal da conversa que embasou cada nota.
+
+Retorne:
 {
   "score_pos_entrevista": 0-100,
-  "analise_pos_entrevista": "texto curto com pontos fortes, riscos e recomendação",
-  "momento_profissional": "texto curto",
+  "notas": {
+    "p1_trajetoria": 0-20,
+    "p2_cargo_especifico": 0-20,
+    "p3_cargo_especifico": 0-20,
+    "p4_faltas": 0-20,
+    "p5_disponibilidade": 0-20
+  },
+  "trechos": {
+    "p1": "trecho literal que embasou a nota",
+    "p2": "trecho literal",
+    "p3": "trecho literal",
+    "p4": "trecho literal",
+    "p5": "trecho literal"
+  },
+  "red_flags": "descrever se houver, ou null",
+  "analise_pos_entrevista": "resumo objetivo em 2-3 linhas: pontos fortes, riscos, recomendação",
+  "momento_profissional": "situação atual em 1 linha",
   "pontos_positivos": "texto curto",
   "pontos_melhoria": "texto curto"
 }
-
-Regras:
-- score_pos_entrevista inteiro de 0 a 100.
-- Seja objetivo e baseado somente na conversa.
-- Não use markdown.
 
 Conversa:
 """${transcricao}"""`;
 
     const resposta = await anthropic.messages.create({
       model: process.env.CLAUDE_MODEL || "claude-sonnet-4-5",
-      max_tokens: 600,
+      max_tokens: 800,
       messages: [{ role: "user", content: prompt }],
     });
+
     const texto = (resposta.content || [])
       .filter((c) => c.type === "text")
       .map((c) => c.text)
       .join("\n")
       .trim();
+
     const avaliacao = extrairJsonSeguro(texto);
     if (!avaliacao) return;
 
@@ -548,6 +652,9 @@ Conversa:
 
     const payload = {
       score_pos_entrevista: scorePosSanitizado,
+      notas_entrevista: avaliacao.notas || null,
+      trechos_entrevista: avaliacao.trechos || null,
+      red_flags_entrevista: avaliacao.red_flags || null,
       analise_pos_entrevista: avaliacao.analise_pos_entrevista || null,
       momento_profissional: avaliacao.momento_profissional || null,
       pontos_positivos: avaliacao.pontos_positivos || null,
@@ -565,6 +672,10 @@ Conversa:
         processado_em: new Date().toISOString(),
       });
     }
+
+    console.log(
+      `[entrevista-score] scored candidato ${candidatoId}: ${scorePosSanitizado} (final: ${scoreFinal})`
+    );
   } catch (err) {
     console.error("[entrevista-score] erro ao atualizar score pós-entrevista:", err);
   }
@@ -713,12 +824,12 @@ function sanitizarMensagemAna(etapaAtual, userMessage, assistantMessage) {
     etapa === "mini_entrevista" &&
     /^(trabalhei|meu desligamento|eu lido|eu trabalhei)\b/i.test(msg)
   ) {
-    return "perfeito. me conta sobre seu último emprego, como foi trabalhar lá e por que você saiu?";
+    return "pode me contar melhor? me fala sobre seu último emprego.";
   }
 
   // Quando candidato responde algo como "tanto faz", Ana deve apenas conduzir pergunta.
   if (etapa === "mini_entrevista" && /forma como preferir|tanto faz|como preferir/.test(user)) {
-    return "perfeito. me conta sobre seu último emprego, como foi trabalhar lá e por que você saiu?";
+    return "pode me contar melhor? me fala sobre seu último emprego.";
   }
 
   return msg;
@@ -1114,7 +1225,7 @@ async function getGeResponse(candidatoId, userMessage) {
   // 12. Chama Claude
   const response = await anthropic.messages.create({
     model: process.env.CLAUDE_MODEL || "claude-sonnet-4-5",
-    max_tokens: 1024,
+    max_tokens: 300,
     system: systemPromptDinamico,
     messages: history,
   });
@@ -1147,7 +1258,7 @@ async function getGeResponse(candidatoId, userMessage) {
     .eq("id", sessaoId);
 
   if (tipoFluxoAtual === "candidatura") {
-    await atualizarScorePosEntrevista(candidatoId, sessaoId);
+    await atualizarScorePosEntrevista(candidatoId, sessaoId, tipoCargo);
   }
 
   return assistantMessage;
@@ -1157,16 +1268,13 @@ function consumeIdempotencyKey(req, res) {
   const key = req.headers["x-idempotency-key"];
   if (!key) return true;
 
-  if (processedIdempotencyKeys.has(key)) {
+  if (idempotencyHas(key)) {
     console.log("[webhook] duplicata ignorada (X-Idempotency-Key):", key);
     res.status(200).json({ ok: true, duplicate: true });
     return false;
   }
 
-  processedIdempotencyKeys.add(key);
-  if (processedIdempotencyKeys.size > IDEMPOTENCY_CACHE_MAX) {
-    processedIdempotencyKeys.clear();
-  }
+  idempotencyAdd(key);
   return true;
 }
 
@@ -1266,15 +1374,12 @@ app.post("/webhook", async (req, res) => {
     for (const itemPayload of expanded.items) {
       const messageId = itemPayload?.message?.id;
       if (messageId) {
-        if (processedIdempotencyKeys.has(messageId)) {
+        if (idempotencyHas(messageId)) {
           console.log("[webhook] duplicata ignorada (message.id):", messageId);
           results.push({ duplicate: true });
           continue;
         }
-        processedIdempotencyKeys.add(messageId);
-        if (processedIdempotencyKeys.size > IDEMPOTENCY_CACHE_MAX) {
-          processedIdempotencyKeys.clear();
-        }
+        idempotencyAdd(messageId);
       }
 
       const extracted = extractKapsoInboundFromPayload(itemPayload);
