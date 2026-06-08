@@ -89,24 +89,19 @@ async function resolverTipoCargo(candidatoId, candidaturaId) {
   return inferirTipoCargo(candidato?.cargo_principal);
 }
 
-async function atualizarScorePosEntrevista(candidatoId, sessaoId, tipoCargo) {
-  const { data: sessao } = await supabase
-    .from("whatsapp_sessoes")
-    .select("etapa_atual")
-    .eq("id", sessaoId)
-    .maybeSingle();
-
-  if (!sessao || sessao.etapa_atual !== "encerramento") {
-    return { ok: false, reason: "nao_encerramento" };
+/** Batch: aceita roteiro v3 ou legado — avalia o que tiver na conversa. */
+function avaliarElegibilidadeBatch(historico) {
+  if (!historico || historico.length === 0) {
+    return { ok: false, reason: "sem_historico" };
   }
 
-  const historico = await loadConversationHistoryBySessao(sessaoId);
-  if (!historico || historico.length === 0) return { ok: false, reason: "sem_historico" };
-
   const respostasCandidato = historico.filter((m) => m.role === "user" && m.content).length;
-  if (respostasCandidato < 3) return { ok: false, reason: "poucas_respostas" };
+  if (respostasCandidato < 2) {
+    return { ok: false, reason: "poucas_respostas" };
+  }
 
-  const roteiroMini = [
+  const perguntasAna = historico.filter((m) => m.role === "assistant" && m.content);
+  const trechosV3 = [
     "me conta sobre seu último emprego",
     "quantas vezes você costuma faltar",
     "como tá sua disponibilidade de horário",
@@ -115,15 +110,34 @@ async function atualizarScorePosEntrevista(candidatoId, sessaoId, tipoCargo) {
     "qual foi o pior perrengue ou situação que teve com um colaborador",
     "na sua visão, quais são os processos mais importantes",
   ];
-  const perguntasRoteiroRespondidas = roteiroMini.filter((trecho) =>
-    historico.some(
-      (m) =>
-        m.role === "assistant" &&
-        m.content &&
-        m.content.toLowerCase().includes(trecho)
-    )
-  ).length;
-  if (perguntasRoteiroRespondidas < 3) return { ok: false, reason: "roteiro_insuficiente" };
+  const trechosLegado = [
+    "como você lida com imprevistos",
+    "situação no trabalho que você não concordou",
+    "me fala um pouco de você",
+    "disponibilidade de horário e escala",
+  ];
+
+  const matchTrecho = (trecho) =>
+    perguntasAna.some((m) => m.content.toLowerCase().includes(trecho));
+
+  const hitsV3 = trechosV3.filter(matchTrecho).length;
+  const hitsLegado = trechosLegado.filter(matchTrecho).length;
+  const hitsMini = hitsV3 + hitsLegado;
+
+  if (hitsMini < 1) {
+    return { ok: false, reason: "sem_mini_entrevista" };
+  }
+
+  const roteiro =
+    hitsV3 >= 2 ? "v3" : hitsLegado >= 1 && hitsV3 === 0 ? "legado" : "misto";
+
+  return { ok: true, roteiro, respostasCandidato, hitsMini };
+}
+
+async function atualizarScorePosEntrevista(candidatoId, sessaoId, tipoCargo) {
+  const historico = await loadConversationHistoryBySessao(sessaoId);
+  const elegibilidade = avaliarElegibilidadeBatch(historico);
+  if (!elegibilidade.ok) return elegibilidade;
 
   const transcricao = historico
     .map((m) => `${m.role === "assistant" ? "ana" : "candidato"}: ${m.content}`)
@@ -209,10 +223,18 @@ ${guia}
 
 REGRAS:
 - Avaliar cada pergunta com nota 0-20.
-- Se pergunta não foi feita ou não foi respondida: nota 0, marcar como "nao_respondida".
+- Se pergunta v3 não foi feita ou não foi respondida: nota 0 e marcar "nao_respondida".
+- score_pos_entrevista = soma das 5 notas (máximo 100).
 - Red flag eliminatório em qualquer pergunta: score_pos_entrevista máximo 30.
 - Basear avaliação exclusivamente no que o candidato disse. Sem inferência.
 - Incluir trecho literal da conversa que embasou cada nota.
+
+ROTEIRO LEGADO (conversas antigas — mapear para o guia v3 o que der):
+- "como você lida com imprevistos no trabalho" → usar critérios de P2 (pico/pressão ou conflito, conforme cargo).
+- "situação no trabalho que você não concordou" → usar critérios de P3 (cliente difícil ou conflito com colaborador).
+- "me fala um pouco de você" → complementar P1 e/ou momento_profissional se couber.
+- "disponibilidade de horário e escala" → P5.
+- Faça o melhor mapeamento possível com o que foi perguntado e respondido. Não invente respostas.
 
 Retorne:
 {
@@ -294,7 +316,13 @@ Conversa:
     });
   }
 
-  return { ok: true, scorePos: scorePosSanitizado, scoreFinal, tipoCargo: cargo };
+  return {
+    ok: true,
+    scorePos: scorePosSanitizado,
+    scoreFinal,
+    tipoCargo: cargo,
+    roteiro: elegibilidade.roteiro,
+  };
 }
 
 async function main() {
@@ -326,7 +354,7 @@ async function main() {
       if (result.ok) {
         ok += 1;
         console.log(
-          `[ok] sessao=${s.id} tipo=${result.tipoCargo} score_pos=${result.scorePos} score_final=${result.scoreFinal}`
+          `[ok] sessao=${s.id} roteiro=${result.roteiro} tipo=${result.tipoCargo} score_pos=${result.scorePos} score_final=${result.scoreFinal}`
         );
       } else {
         skipped += 1;
