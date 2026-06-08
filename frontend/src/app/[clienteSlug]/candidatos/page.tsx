@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { displayScoreEntrevista, normalizePercentScore } from "@/lib/score";
 import type { CandidatoInscricaoRow } from "./ui/CandidatoInscricaoCard";
@@ -23,8 +23,16 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ActiveFilterChips } from "@/components/ui/ActiveFilterChips";
 import { getClienteBySlug } from '@/lib/getClienteBySlug'
 import { useClienteSlug } from '@/lib/context/ClienteSlugContext'
+import {
+  apiVagaFromListQuery,
+  buildCandidatoDetailHref,
+  CANDIDATOS_LIST_DEFAULTS,
+  type CandidatosSortKey,
+  parseCandidatosListQuery,
+  serializeCandidatosListQuery,
+} from "./ui/candidatosListQuery";
 
-type SortKey = "candidato" | "score" | "score_entrevista" | "etapa" | "inscricao";
+type SortKey = CandidatosSortKey;
 type SummaryCounts = CandidaturaSummaryCounts;
 
 function scoreClass(score: number | null): string {
@@ -88,29 +96,109 @@ function sortArrow(sortBy: SortKey, sortDir: "asc" | "desc", key: SortKey): stri
   return sortDir === "asc" ? "↑" : "↓";
 }
 
+function scoreCv(a: CandidatoInscricaoRow): number {
+  return normalizePercentScore(a.score ?? a.candidato.score) ?? -1;
+}
+
+function scoreEnt(a: CandidatoInscricaoRow): number {
+  return displayScoreEntrevista(a.score_entrevista) ?? -1;
+}
+
+/** Ordenação primária + desempate: Score Ent e Score CV (maiores primeiro). */
+function compareCandidatoRows(a: CandidatoInscricaoRow, b: CandidatoInscricaoRow, sortBy: SortKey, sortDir: "asc" | "desc"): number {
+  const stageRank = CANDIDATURA_STATUS_RANK;
+  let cmp = 0;
+  if (sortBy === "candidato") cmp = a.candidato.nome.localeCompare(b.candidato.nome, "pt");
+  if (sortBy === "score") cmp = scoreCv(a) - scoreCv(b);
+  if (sortBy === "score_entrevista") cmp = scoreEnt(a) - scoreEnt(b);
+  if (sortBy === "etapa") {
+    cmp =
+      (stageRank[normalizeCandidaturaStatus(a.status) ?? "inscrito"] ?? -1) -
+      (stageRank[normalizeCandidaturaStatus(b.status) ?? "inscrito"] ?? -1);
+  }
+  if (sortBy === "inscricao") {
+    const ta = a.enviado_em ? new Date(a.enviado_em).getTime() : 0;
+    const tb = b.enviado_em ? new Date(b.enviado_em).getTime() : 0;
+    cmp = ta - tb;
+  }
+  if (cmp !== 0) return sortDir === "asc" ? cmp : -cmp;
+
+  if (sortBy !== "score_entrevista") {
+    const entCmp = scoreEnt(b) - scoreEnt(a);
+    if (entCmp !== 0) return entCmp;
+  }
+  if (sortBy !== "score") {
+    const cvCmp = scoreCv(b) - scoreCv(a);
+    if (cvCmp !== 0) return cvCmp;
+  }
+  return a.candidato.nome.localeCompare(b.candidato.nome, "pt");
+}
+
 function CandidatosContent() {
   const slug = useClienteSlug()
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const vagaFromQuery = (searchParams.get("vaga") ?? "").trim();
+  const vagaFromQuery = apiVagaFromListQuery(searchParams);
+  const skipUrlSync = useRef(false);
   const [loading, setLoading] = useState(true);
   const [noCliente, setNoCliente] = useState(false);
   const [vagasAtivas, setVagasAtivas] = useState<Array<{ id: string; cargo: string; titulo_publicacao?: string | null }>>([]);
   const [rawRows, setRawRows] = useState<CandidatoInscricaoRow[]>([]);
   const [summaryCounts, setSummaryCounts] = useState<SummaryCounts | null>(null);
-  const [q, setQ] = useState("");
-  const [selectedVagaIds, setSelectedVagaIds] = useState<string[]>(() => (vagaFromQuery ? [vagaFromQuery] : []));
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [statusTodos, setStatusTodos] = useState(true);
-  const [statusKeys, setStatusKeys] = useState<StatusFiltroKey[]>([]);
-  const [kmMax, setKmMax] = useState(50);
-  const [sortBy, setSortBy] = useState<SortKey>("score");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [page, setPage] = useState(1);
+  const [q, setQ] = useState(CANDIDATOS_LIST_DEFAULTS.q);
+  const [selectedVagaIds, setSelectedVagaIds] = useState<string[]>(CANDIDATOS_LIST_DEFAULTS.selectedVagaIds);
+  const [selectedTags, setSelectedTags] = useState<string[]>(CANDIDATOS_LIST_DEFAULTS.selectedTags);
+  const [statusTodos, setStatusTodos] = useState(CANDIDATOS_LIST_DEFAULTS.statusTodos);
+  const [statusKeys, setStatusKeys] = useState<StatusFiltroKey[]>(CANDIDATOS_LIST_DEFAULTS.statusKeys);
+  const [kmMax, setKmMax] = useState(CANDIDATOS_LIST_DEFAULTS.kmMax);
+  const [sortBy, setSortBy] = useState<SortKey>(CANDIDATOS_LIST_DEFAULTS.sortBy);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(CANDIDATOS_LIST_DEFAULTS.sortDir);
+  const [page, setPage] = useState(CANDIDATOS_LIST_DEFAULTS.page);
   const [hasMore, setHasMore] = useState(false);
   const PAGE_SIZE = 100;
   const supabase = useSupabaseBrowser();
+
+  useEffect(() => {
+    skipUrlSync.current = true;
+    const parsed = parseCandidatosListQuery(searchParams);
+    setQ(parsed.q);
+    setSelectedVagaIds(parsed.selectedVagaIds);
+    setSelectedTags(parsed.selectedTags);
+    setStatusTodos(parsed.statusTodos);
+    setStatusKeys(parsed.statusKeys);
+    setKmMax(parsed.kmMax);
+    setSortBy(parsed.sortBy);
+    setSortDir(parsed.sortDir);
+    setPage(parsed.page);
+  }, [searchParams]);
+
+  const listQueryString = useMemo(
+    () =>
+      serializeCandidatosListQuery({
+        q,
+        selectedVagaIds,
+        selectedTags,
+        statusTodos,
+        statusKeys,
+        kmMax,
+        sortBy,
+        sortDir,
+        page,
+      }),
+    [q, selectedVagaIds, selectedTags, statusTodos, statusKeys, kmMax, sortBy, sortDir, page]
+  );
+
+  useEffect(() => {
+    if (skipUrlSync.current) {
+      skipUrlSync.current = false;
+      return;
+    }
+    const next = listQueryString;
+    const current = searchParams.toString();
+    if (next === current) return;
+    router.replace(next ? `${pathname}?${next}` : pathname || `/${slug}/candidatos`, { scroll: false });
+  }, [listQueryString, pathname, router, searchParams, slug]);
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -166,11 +254,6 @@ function CandidatosContent() {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    if (!vagaFromQuery) return;
-    setSelectedVagaIds((prev) => (prev.length === 1 && prev[0] === vagaFromQuery ? prev : [vagaFromQuery]));
-  }, [vagaFromQuery]);
-
   const availableTags = useMemo(() => {
     return [...ALLOWED_CANDIDATE_TAGS];
   }, []);
@@ -198,28 +281,7 @@ function CandidatosContent() {
       return r.distancia_km != null && r.distancia_km <= kmMax;
     });
     if (!statusTodos && statusKeys.length > 0) rows = rows.filter((r) => statusKeys.some((k) => statusMatchesKey(r.status, k)));
-    const stageRank = CANDIDATURA_STATUS_RANK;
-    rows = [...rows].sort((a, b) => {
-      let cmp = 0;
-      if (sortBy === "candidato") cmp = a.candidato.nome.localeCompare(b.candidato.nome, "pt");
-      if (sortBy === "score") cmp = (normalizePercentScore(a.score ?? a.candidato.score) ?? -1) - (normalizePercentScore(b.score ?? b.candidato.score) ?? -1);
-      if (sortBy === "score_entrevista") {
-        cmp =
-          (displayScoreEntrevista(a.score_entrevista) ?? -1) -
-          (displayScoreEntrevista(b.score_entrevista) ?? -1);
-      }
-      if (sortBy === "etapa") {
-        cmp =
-          (stageRank[normalizeCandidaturaStatus(a.status) ?? "inscrito"] ?? -1) -
-          (stageRank[normalizeCandidaturaStatus(b.status) ?? "inscrito"] ?? -1);
-      }
-      if (sortBy === "inscricao") {
-        const ta = a.enviado_em ? new Date(a.enviado_em).getTime() : 0;
-        const tb = b.enviado_em ? new Date(b.enviado_em).getTime() : 0;
-        cmp = ta - tb;
-      }
-      return sortDir === "asc" ? cmp : -cmp;
-    });
+    rows = [...rows].sort((a, b) => compareCandidatoRows(a, b, sortBy, sortDir));
     if (t) {
       rows = rows.filter(
         (r) =>
@@ -263,13 +325,13 @@ function CandidatosContent() {
   }, [q, selectedVagaIds, vagasAtivas, selectedTags, statusTodos, statusKeys, kmMax]);
 
   function clearAllFilters() {
-    if (vagaFromQuery) router.replace(pathname || `/${slug}/candidatos`);
     setQ("");
     setSelectedVagaIds([]);
     setSelectedTags([]);
     setStatusTodos(true);
     setStatusKeys([]);
     setKmMax(50);
+    setPage(1);
   }
 
   function onSort(key: SortKey) {
@@ -446,7 +508,7 @@ function CandidatosContent() {
                     const exp = (r.candidato.exp_resumo?.trim() || "").split(/\n|[;|]/)[0]?.trim() || buildExperienciaResumoLinha(r.candidato) || "—";
                     const nextEtapa = nextLabel(r.status);
                     return (
-                      <tr key={r.candidaturaId} style={{ cursor: "pointer" }} onClick={() => router.push(`/${slug}/candidatos/${r.candidato.id}?vaga=${encodeURIComponent(r.vagaId)}`)}>
+                      <tr key={r.candidaturaId} style={{ cursor: "pointer" }} onClick={() => router.push(buildCandidatoDetailHref(slug, r.candidato.id, r.vagaId, listQueryString))}>
                         <td>
                           <div className="flex aic g8">
                             <div className="av">{initialsFromNome(r.candidato.nome)}</div>
@@ -512,11 +574,11 @@ function CandidatosContent() {
                   className="candidatos-mobile-card"
                   role="button"
                   tabIndex={0}
-                  onClick={() => router.push(`/${slug}/candidatos/${r.candidato.id}?vaga=${encodeURIComponent(r.vagaId)}`)}
+                  onClick={() => router.push(buildCandidatoDetailHref(slug, r.candidato.id, r.vagaId, listQueryString))}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      router.push(`/${slug}/candidatos/${r.candidato.id}?vaga=${encodeURIComponent(r.vagaId)}`);
+                      router.push(buildCandidatoDetailHref(slug, r.candidato.id, r.vagaId, listQueryString));
                     }
                   }}
                 >

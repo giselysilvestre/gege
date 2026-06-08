@@ -12,6 +12,7 @@ import {
   candidaturaStatusPill,
   nextCandidaturaStatus,
 } from "@/lib/candidatura-status";
+import { buildCandidatosBackHref } from "../ui/candidatosListQuery";
 
 type Candidato = {
   id: string;
@@ -322,10 +323,9 @@ function CandidatoPerfilInner() {
   const id = String(params.id ?? "");
   const clienteSlug = String(params.clienteSlug ?? "");
   const vagaId = searchParams.get("vaga");
+  const listaQuery = searchParams.get("lista");
 
-  const backHref = vagaId
-    ? `/${clienteSlug}/vagas/${encodeURIComponent(vagaId)}`
-    : `/${clienteSlug}/candidatos`;
+  const backHref = buildCandidatosBackHref(clienteSlug, listaQuery, vagaId);
 
   const [acoesMenuOpen, setAcoesMenuOpen] = useState(false);
   const acoesMenuRef = useRef<HTMLDivElement>(null);
