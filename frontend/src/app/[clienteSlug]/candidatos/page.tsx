@@ -7,6 +7,16 @@ import type { CandidatoInscricaoRow } from "./ui/CandidatoInscricaoCard";
 import { ALLOWED_CANDIDATE_TAGS, toAllowedCandidateTags } from "@/lib/candidate-tags";
 import { CandidatosFiltersBar } from "./ui/CandidatosFiltersBar";
 import { STATUS_FILTRO_LABELS, type StatusFiltroKey } from "./ui/candidatosConstants";
+import {
+  CANDIDATURA_FUNIL_BOXES,
+  CANDIDATURA_STATUS_RANK,
+  type CandidaturaSummaryCounts,
+  candidaturaStatusLabel,
+  candidaturaStatusPill,
+  emptySummaryCounts,
+  nextCandidaturaStatus,
+  normalizeCandidaturaStatus,
+} from "@/lib/candidatura-status";
 import { buildExperienciaResumoLinha } from "./ui/candidatosFormat";
 import { useSupabaseBrowser } from "@/lib/supabase/useSupabaseBrowser";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -15,45 +25,7 @@ import { getClienteBySlug } from '@/lib/getClienteBySlug'
 import { useClienteSlug } from '@/lib/context/ClienteSlugContext'
 
 type SortKey = "candidato" | "score" | "score_entrevista" | "etapa" | "inscricao";
-type SummaryCounts = {
-  todos: number;
-  triagem: number;
-  entrevista: number;
-  teste: number;
-  contratado: number;
-  desistiu: number;
-};
-
-function stageCountPredicate(status: string, stage: "triagem" | "entrevista" | "teste" | "contratado" | "desistiu"): boolean {
-  if (stage === "triagem") return status === "novo" || status === "em_triagem";
-  if (stage === "entrevista") return status === "em_entrevista" || status === "entrevista" || status === "entrevistado";
-  if (stage === "teste") return status === "em_teste" || status === "teste" || status === "aprovado_teste" || status === "aprovado";
-  if (stage === "contratado") return status === "contratado";
-  return status === "reprovado" || status === "desistiu";
-}
-
-function etapaPill(status: string): { className: string; label: string } {
-  switch (status) {
-    case "contratado":
-      return { className: "ep ep-contratado", label: "Contratado" };
-    case "reprovado":
-    case "desistiu":
-      return { className: "ep ep-reprovado", label: "Desistiu" };
-    case "em_entrevista":
-    case "entrevista":
-    case "entrevistado":
-      return { className: "ep ep-entrevista", label: "Entrevista" };
-    case "em_teste":
-    case "teste":
-    case "aprovado":
-    case "aprovado_teste":
-      return { className: "ep ep-teste", label: "Teste" };
-    case "em_triagem":
-      return { className: "ep ep-triagem", label: "Triagem" };
-    default:
-      return { className: "ep ep-inscrito", label: "Inscrito" };
-  }
-}
+type SummaryCounts = CandidaturaSummaryCounts;
 
 function scoreClass(score: number | null): string {
   const n = normalizePercentScore(score);
@@ -103,28 +75,12 @@ function cidadeUf(cidade: string | null | undefined): string | null {
 }
 
 function statusMatchesKey(status: string, key: StatusFiltroKey): boolean {
-  if (key === "entrevista") return status === "em_entrevista" || status === "entrevista" || status === "entrevistado";
-  if (key === "teste") return status === "em_teste" || status === "teste" || status === "aprovado" || status === "aprovado_teste";
-  if (key === "contratado") return status === "contratado";
-  if (key === "reprovado") return status === "reprovado" || status === "desistiu";
-  return false;
-}
-
-function nextDbStatus(current: string): string | null {
-  if (current === "novo") return "em_triagem";
-  if (current === "em_triagem") return "em_entrevista";
-  if (current === "em_entrevista" || current === "entrevista" || current === "entrevistado") return "em_teste";
-  if (current === "em_teste" || current === "teste" || current === "aprovado" || current === "aprovado_teste") return "contratado";
-  return null;
+  return normalizeCandidaturaStatus(status) === key;
 }
 
 function nextLabel(current: string): string | null {
-  const n = nextDbStatus(current);
-  if (n === "em_triagem") return "Triagem";
-  if (n === "em_entrevista") return "Entrevista";
-  if (n === "em_teste") return "Teste";
-  if (n === "contratado") return "Contratado";
-  return null;
+  const n = nextCandidaturaStatus(current);
+  return n ? candidaturaStatusLabel(n) : null;
 }
 
 function sortArrow(sortBy: SortKey, sortDir: "asc" | "desc", key: SortKey): string {
@@ -219,18 +175,16 @@ function CandidatosContent() {
     return [...ALLOWED_CANDIDATE_TAGS];
   }, []);
 
-  const stageCounts = useMemo(
-    () =>
-      summaryCounts ?? {
-        todos: rawRows.length,
-        triagem: rawRows.filter((r) => stageCountPredicate(r.status, "triagem")).length,
-        entrevista: rawRows.filter((r) => stageCountPredicate(r.status, "entrevista")).length,
-        teste: rawRows.filter((r) => stageCountPredicate(r.status, "teste")).length,
-        contratado: rawRows.filter((r) => stageCountPredicate(r.status, "contratado")).length,
-        desistiu: rawRows.filter((r) => stageCountPredicate(r.status, "desistiu")).length,
-      },
-    [rawRows, summaryCounts]
-  );
+  const stageCounts = useMemo(() => {
+    if (summaryCounts) return summaryCounts;
+    const counts = emptySummaryCounts();
+    counts.todos = rawRows.length;
+    for (const r of rawRows) {
+      const s = normalizeCandidaturaStatus(r.status);
+      if (s) counts[s] += 1;
+    }
+    return counts;
+  }, [rawRows, summaryCounts]);
   const hasDistanceData = useMemo(() => rawRows.some((r) => r.distancia_km != null), [rawRows]);
 
   const tableRows = useMemo(() => {
@@ -244,15 +198,7 @@ function CandidatosContent() {
       return r.distancia_km != null && r.distancia_km <= kmMax;
     });
     if (!statusTodos && statusKeys.length > 0) rows = rows.filter((r) => statusKeys.some((k) => statusMatchesKey(r.status, k)));
-    const stageRank: Record<string, number> = {
-      novo: 1,
-      em_triagem: 2,
-      em_entrevista: 3,
-      em_teste: 4,
-      contratado: 5,
-      reprovado: 0,
-      desistiu: 0,
-    };
+    const stageRank = CANDIDATURA_STATUS_RANK;
     rows = [...rows].sort((a, b) => {
       let cmp = 0;
       if (sortBy === "candidato") cmp = a.candidato.nome.localeCompare(b.candidato.nome, "pt");
@@ -262,7 +208,11 @@ function CandidatosContent() {
           (displayScoreEntrevista(a.score_entrevista) ?? -1) -
           (displayScoreEntrevista(b.score_entrevista) ?? -1);
       }
-      if (sortBy === "etapa") cmp = (stageRank[a.status] ?? -1) - (stageRank[b.status] ?? -1);
+      if (sortBy === "etapa") {
+        cmp =
+          (stageRank[normalizeCandidaturaStatus(a.status) ?? "inscrito"] ?? -1) -
+          (stageRank[normalizeCandidaturaStatus(b.status) ?? "inscrito"] ?? -1);
+      }
       if (sortBy === "inscricao") {
         const ta = a.enviado_em ? new Date(a.enviado_em).getTime() : 0;
         const tb = b.enviado_em ? new Date(b.enviado_em).getTime() : 0;
@@ -354,7 +304,7 @@ function CandidatosContent() {
     }
     const row = rawRows.find((r) => r.candidaturaId === candidaturaId);
     if (!row) return;
-    const next = nextDbStatus(row.status);
+    const next = nextCandidaturaStatus(row.status);
     if (!next) return;
     await supabase.from("candidaturas").update({ status: next }).eq("id", candidaturaId);
     await load();
@@ -362,14 +312,11 @@ function CandidatosContent() {
 
   if (loading) return <div className="fs14 c600" style={{ padding: 8 }}>Carregando candidatos…</div>;
 
-  const stageBoxes: { key: string; label: string; n: number }[] = [
-    { key: "todos", label: "Inscritos", n: stageCounts.todos },
-    { key: "triagem", label: "Triagem", n: stageCounts.triagem },
-    { key: "entrevista", label: "Entrevista", n: stageCounts.entrevista },
-    { key: "teste", label: "Teste", n: stageCounts.teste },
-    { key: "contratado", label: "Contratado", n: stageCounts.contratado },
-    { key: "desistiu", label: "Desistiu", n: stageCounts.desistiu },
-  ];
+  const stageBoxes = CANDIDATURA_FUNIL_BOXES.map((b) => ({
+    key: b.key,
+    label: b.label,
+    n: stageCounts[b.key],
+  }));
 
   return (
     <div style={{ minHeight: "100%" }}>
@@ -412,13 +359,10 @@ function CandidatosContent() {
         ))}
       </div>
       <div className="stage-summary-mobile mb16">
-        {[
-          { n: stageCounts.todos, label: "Inscritos" },
-          { n: stageCounts.triagem, label: "Triagem" },
-          { n: stageCounts.entrevista, label: "Entrevista" },
-          { n: stageCounts.teste, label: "Teste" },
-          { n: stageCounts.contratado, label: "Contratado" },
-        ].map((s) => (
+        {CANDIDATURA_FUNIL_BOXES.filter((b) => b.key !== "reprovado" && b.key !== "desistiu").map((b) => ({
+          n: stageCounts[b.key],
+          label: b.label,
+        })).map((s) => (
           <div key={s.label} className="stage-summary-mobile-item">
             <div className="stage-summary-mobile-n">{s.n}</div>
             <div className="stage-summary-mobile-l">{s.label}</div>
@@ -440,7 +384,7 @@ function CandidatosContent() {
         <div className="card mb16" style={{ background: "var(--warning-bg-soft)", border: "1px solid var(--warning-border-soft)" }}>
           <p className="fs13 c700" style={{ marginBottom: 6 }}>Nenhuma inscrição encontrada para este filtro.</p>
           <p className="fs12 c600" style={{ marginBottom: hasActiveFilters ? 10 : 0 }}>
-            Se a etapa "Entrevista" estiver vazia no banco, o resultado vazio aqui é esperado.
+            Se o status filtrado não existir no banco, o resultado vazio aqui é esperado.
           </p>
           {hasActiveFilters ? (
             <button type="button" className="btn btn-ghost btn-xs" onClick={clearAllFilters}>
@@ -491,7 +435,7 @@ function CandidatosContent() {
                 </thead>
                 <tbody>
                   {tableRows.map((r) => {
-                    const ep = etapaPill(r.status);
+                    const ep = candidaturaStatusPill(r.status);
                     const dt = r.enviado_em ? new Date(r.enviado_em) : null;
                     const insc = dt && Number.isFinite(dt.getTime()) ? dt.toLocaleDateString("pt-BR") : "—";
                     const mergedTags = tagsDaLinha(r).slice(0, 4);
@@ -555,7 +499,7 @@ function CandidatosContent() {
 
           <div className="candidatos-mobile-list">
             {tableRows.map((r) => {
-              const ep = etapaPill(r.status);
+              const ep = candidaturaStatusPill(r.status);
               const mergedTags = tagsDaLinha(r).slice(0, 4);
               const sc = normalizePercentScore(r.score ?? r.candidato.score);
               const scEnt = displayScoreEntrevista(r.score_entrevista);

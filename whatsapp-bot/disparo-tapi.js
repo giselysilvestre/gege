@@ -1,7 +1,12 @@
 /**
  * disparo-tapi.js
  *
- * Script de disparo outbound do template abordagem_candidatura_gege.
+ * Script de disparo outbound do template aprovado abordagem_candidatura_gege (pt_BR).
+ * Corpo do template (variáveis {{nome}} e {{cargo}}):
+ *   oiee {{nome}}, tudo bem?
+ *   Eu sou a Ana, cuido de nossas oportunidades de emprego. Encontrei o seu currículo
+ *   e gostei muito do seu perfil 😊.
+ *   Queria conversar sobre uma oportunidade de {{cargo}}. Posso te contar mais?
  *
  * Uso (via Railway CLI pra pegar env vars do projeto):
  *   railway run node whatsapp-bot/disparo-tapi.js --vaga=<uuid> [opções]
@@ -15,10 +20,14 @@
  *   --limit=N       → no máximo N pessoas (ordem = resultado da query)
  *   --candidatura=  → só essa candidatura (precisa ser elegível)
  *   --candidato=    → só esse candidato_id (precisa ser elegível p/ essa vaga)
- *   --status=novo|any  → por padrão filtra status=novo; use any para ignorar status
+ *   --status=inscrito|novo|any  → por padrão filtra status=inscrito; use any para ignorar status
  *   --score-min=N      → nota mínima em score_ia (padrão 75)
  *   --fit=Alto|Médio|Baixo|any  → fit exigido (padrão Alto)
  *   --ignorar-disponivel → não exige candidato.disponivel=true
+ *
+ * Feedbacks de reprovação (templates v2): ver feedback-reprovacao.js
+ *   reprovado_distancia / reprovado_desistencia / reprovado_horario → imediato (CRM /acoes reprovar)
+ *   reprovado_score → agendado 48h após encerramento da entrevista (whatsapp_mensagens_agendadas)
  */
 
 require("dotenv").config();
@@ -54,7 +63,8 @@ const DRY_RUN = !!args["dry-run"];
 const LIMIT = args.limit ? parseInt(args.limit, 10) : null;
 const CANDIDATURA_ID = args.candidatura || null;
 const CANDIDATO_ID = args.candidato || null;
-const STATUS_FILTER = (args.status || "novo").toLowerCase();
+const STATUS_FILTER_RAW = (args.status || "inscrito").toLowerCase();
+const STATUS_FILTER = STATUS_FILTER_RAW === "novo" ? "inscrito" : STATUS_FILTER_RAW;
 const SCORE_MIN = args["score-min"] ? Number(args["score-min"]) : 75;
 const FIT_FILTER_RAW = args.fit || "Alto";
 const FIT_FILTER = String(FIT_FILTER_RAW).toLowerCase();
@@ -297,7 +307,7 @@ async function main() {
         tipo_midia: "texto",
         tipo_mensagem: "template",
         etapa_roteiro: "disparo_template",
-        conteudo: `[template:${TEMPLATE_NAME}] nome=${primeiroNome}, cargo=${cargoTemplate}`,
+        conteudo: `[template:${TEMPLATE_NAME}] oiee ${primeiroNome}, tudo bem? ... oportunidade de ${cargoTemplate}. Posso te contar mais?`,
         processado_pela_ia: false,
         espera_resposta: true,
         kapso_message_id: kapsoMessageId,

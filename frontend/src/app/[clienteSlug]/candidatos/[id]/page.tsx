@@ -7,6 +7,11 @@ import { useSupabaseBrowser } from "@/lib/supabase/useSupabaseBrowser";
 import { displayScoreEntrevista, normalizePercentScore } from "@/lib/score";
 import { vagaTituloPublico } from "@/lib/vaga-display";
 import { devError } from "@/lib/devLog";
+import {
+  candidaturaStatusLabel,
+  candidaturaStatusPill,
+  nextCandidaturaStatus,
+} from "@/lib/candidatura-status";
 
 type Candidato = {
   id: string;
@@ -171,27 +176,6 @@ function competenciasBullets(c: Candidato): string[] {
   return out;
 }
 
-function etapaPill(status: string): { className: string; label: string } {
-  switch (status) {
-    case "contratado":
-      return { className: "ep ep-contratado", label: "Contratado" };
-    case "reprovado":
-      return { className: "ep ep-reprovado", label: "Reprovado" };
-    case "em_entrevista":
-    case "entrevista":
-    case "entrevistado":
-      return { className: "ep ep-entrevista", label: "Entrevista" };
-    case "em_teste":
-    case "teste":
-    case "aprovado":
-    case "aprovado_teste":
-      return { className: "ep ep-teste", label: "Teste" };
-    case "em_triagem":
-      return { className: "ep ep-triagem", label: "Triagem" };
-    default:
-      return { className: "ep ep-inscrito", label: "Inscrito" };
-  }
-}
 
 /** Score do currículo (score_ia) — não mistura com entrevista. */
 function cvScoreForDisplay(a: CandidatoAnalise | null): number | null {
@@ -223,21 +207,6 @@ function scoreCircleClass(score: number | null): string {
   return "score score-xl low";
 }
 
-function nextDbStatus(current: string): string | null {
-  switch (current) {
-    case "novo":
-      return "em_triagem";
-    case "em_triagem":
-      return "em_entrevista";
-    case "em_entrevista":
-      return "em_teste";
-    case "em_teste":
-    case "aprovado":
-      return "contratado";
-    default:
-      return null;
-  }
-}
 
 function parseTagList(raw: unknown): string[] {
   if (Array.isArray(raw)) return raw.map((x) => String(x).trim()).filter(Boolean);
@@ -345,18 +314,6 @@ function buildIaCallout(c: Candidato, bullets: string[]): string {
   return (base + comp).trim() || "Análise resumida a partir dos dados do cadastro.";
 }
 
-function triagemLabel(status: string): string {
-  if (status === "reprovado" || status === "desistiu") return "Reprovada";
-  if (status === "em_triagem" || status === "novo") return "Em análise";
-  return "Aprovada IA";
-}
-
-function entrevistaLabel(status: string): string {
-  if (status === "contratado") return "Concluída";
-  if (status === "em_entrevista" || status === "entrevista" || status === "entrevistado") return "Ag. agendamento";
-  if (status === "reprovado" || status === "desistiu") return "—";
-  return "—";
-}
 
 function CandidatoPerfilInner() {
   const params = useParams();
@@ -504,8 +461,8 @@ function CandidatoPerfilInner() {
   const ultimaExperiencia = experienciasOrdenadas[0] ?? null;
   const idade = idadeDe(c?.data_nascimento ?? null);
 
-  const proxDb = candidatura ? nextDbStatus(candidatura.status) : null;
-  const ep = candidatura ? etapaPill(candidatura.status) : null;
+  const proxDb = candidatura ? nextCandidaturaStatus(candidatura.status) : null;
+  const ep = candidatura ? candidaturaStatusPill(candidatura.status) : null;
 
   const historicoProcesso = useMemo(() => {
     if (!candidatura) return [];
@@ -534,7 +491,7 @@ function CandidatoPerfilInner() {
       });
     }
     if (candidatura.atualizado_em && candidatura.enviado_em !== candidatura.atualizado_em) {
-      const pill = etapaPill(candidatura.status);
+      const pill = candidaturaStatusPill(candidatura.status);
       rows.push({
         date: formatTsPt(candidatura.atualizado_em),
         text: `Status: ${pill.label}`,
@@ -584,16 +541,7 @@ function CandidatoPerfilInner() {
     }
   }
 
-  const proximaLabel =
-    proxDb === "em_triagem"
-      ? "Avançar p/ Triagem"
-      : proxDb === "em_entrevista"
-        ? "Avançar p/ Entrevista"
-        : proxDb === "em_teste"
-          ? "Avançar p/ Teste"
-          : proxDb === "contratado"
-            ? "Avançar p/ Contratado"
-            : "Sem próxima etapa";
+  const proximaLabel = proxDb ? `Avançar p/ ${candidaturaStatusLabel(proxDb)}` : "Sem próxima etapa";
 
   return (
     <div style={{ minHeight: "100%", paddingBottom: 32 }}>
@@ -863,9 +811,7 @@ function CandidatoPerfilInner() {
                 </div>
                 <div className="tag-row">
                   {vagaCargo ? <span className="badge b-gray">Cargo: {vagaCargo}</span> : null}
-                  {ep ? <span className={ep.className}>Etapa: {ep.label}</span> : null}
-                  <span className="badge b-olive">Triagem: {candidatura ? triagemLabel(candidatura.status) : "—"}</span>
-                  <span className="badge b-amber">Entrevista: {candidatura ? entrevistaLabel(candidatura.status) : "—"}</span>
+                  {ep ? <span className={ep.className}>Status: {ep.label}</span> : null}
                 </div>
               </div>
 

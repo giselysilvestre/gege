@@ -1,60 +1,94 @@
-/** Contagem do funil e do card de vaga — alinhado a `candidatos/page.tsx` (stagePredicate). */
+/** Contagem do funil — alinhado a `candidatura-status.ts`. */
+
+import {
+  type CandidaturaStatus,
+  isCandidaturaNoFunil,
+  normalizeCandidaturaStatus,
+} from "@/lib/candidatura-status";
 
 export function isReprovado(status: string) {
-  return status === "reprovado" || status === "desistiu";
+  return normalizeCandidaturaStatus(status) === "reprovado";
 }
 
-/** Candidaturas que entram no funil (exclui reprovados). */
+export function isDesistiu(status: string) {
+  return normalizeCandidaturaStatus(status) === "desistiu";
+}
+
+/** Candidaturas que entram no funil (exclui reprovado e desistiu). */
 export function isNoFunil(status: string) {
-  return !isReprovado(status);
+  return isCandidaturaNoFunil(status);
 }
 
-export function countTriagemExclusive(status: string): boolean {
-  // Alinhado ao stage-box de Candidatos: "novo" também conta como Triagem.
-  return status === "novo" || status === "em_triagem";
+function norm(status: string): CandidaturaStatus | null {
+  return normalizeCandidaturaStatus(status);
 }
 
-export function countEntrevistaExclusive(status: string): boolean {
-  return status === "em_entrevista" || status === "entrevista" || status === "entrevistado";
+export function countInscritoExclusive(status: string): boolean {
+  return norm(status) === "inscrito";
 }
 
-export function countTesteExclusive(status: string): boolean {
-  return status === "em_teste" || status === "teste" || status === "aprovado_teste" || status === "aprovado";
+export function countAbordadoExclusive(status: string): boolean {
+  return norm(status) === "abordado";
+}
+
+export function countQualificadoExclusive(status: string): boolean {
+  return norm(status) === "qualificado";
+}
+
+export function countEncaminhadoExclusive(status: string): boolean {
+  return norm(status) === "encaminhado";
 }
 
 export function countContratadoExclusive(status: string): boolean {
-  return status === "contratado";
+  return norm(status) === "contratado";
 }
 
+/** @deprecated use countInscritoExclusive */
+export function countTriagemExclusive(status: string): boolean {
+  return countInscritoExclusive(status) || countAbordadoExclusive(status);
+}
+
+/** @deprecated use countQualificadoExclusive */
+export function countEntrevistaExclusive(status: string): boolean {
+  return countQualificadoExclusive(status);
+}
+
+/** @deprecated use countEncaminhadoExclusive */
+export function countTesteExclusive(status: string): boolean {
+  return countEncaminhadoExclusive(status);
+}
+
+/** @deprecated */
 export function countNovoExclusive(status: string): boolean {
-  return status === "novo";
+  return countInscritoExclusive(status);
 }
 
-/** Linhas do funil: [label key, count, barClass]. Barra 1 = total; demais proporcionais a `total`. */
+/** Linhas do funil no dashboard. */
 export function funnelRowsFromStatuses(statuses: string[]) {
   const active = statuses.filter(isNoFunil);
   const total = active.length;
-  const triagem = active.filter(countTriagemExclusive).length;
-  const entrevista = active.filter(countEntrevistaExclusive).length;
-  const teste = active.filter(countTesteExclusive).length;
+  const inscrito = active.filter(countInscritoExclusive).length;
+  const abordado = active.filter(countAbordadoExclusive).length;
+  const qualificado = active.filter(countQualificadoExclusive).length;
+  const encaminhado = active.filter(countEncaminhadoExclusive).length;
   const contratado = active.filter(countContratadoExclusive).length;
   return [
-    { label: "Inscritos" as const, value: total, key: "total" as const },
-    { label: "Triagem" as const, value: triagem, key: "triagem" as const },
-    { label: "Entrevista" as const, value: entrevista, key: "entrevista" as const },
-    { label: "Teste" as const, value: teste, key: "teste" as const },
-    { label: "Contratados" as const, value: contratado, key: "contratado" as const },
+    { label: "Inscrito" as const, value: total, key: "total" as const },
+    { label: "Abordado" as const, value: abordado, key: "abordado" as const },
+    { label: "Qualificado" as const, value: qualificado, key: "qualificado" as const },
+    { label: "Encaminhado" as const, value: encaminhado, key: "encaminhado" as const },
+    { label: "Contratado" as const, value: contratado, key: "contratado" as const },
   ];
 }
 
-/** Métricas do card de vaga: mesmas contagens exclusivas do funil. */
+/** Métricas do card de vaga. */
 export function vagaPipelineCounts(rows: { status: string }[]) {
-  const list = rows.filter((r) => !isReprovado(r.status));
+  const list = rows.filter((r) => isNoFunil(r.status));
   const inscritos = list.length;
-  const triados = list.filter((r) => countTriagemExclusive(r.status)).length;
-  const entrevistados = list.filter((r) => countEntrevistaExclusive(r.status)).length;
-  const testados = list.filter((r) => countTesteExclusive(r.status)).length;
-  return { inscritos, triados, entrevistados, testados };
+  const abordados = list.filter((r) => countAbordadoExclusive(r.status)).length;
+  const qualificados = list.filter((r) => countQualificadoExclusive(r.status)).length;
+  const encaminhados = list.filter((r) => countEncaminhadoExclusive(r.status)).length;
+  return { inscritos, triados: abordados, entrevistados: qualificados, testados: encaminhados };
 }
 
 export function pctBar(value: number, base: number): number {

@@ -5,14 +5,18 @@ type Status =
   | "em_selecao"
   | "fechada"
   | "cancelada"
+  | "inscrito"
+  | "abordado"
+  | "qualificado"
+  | "encaminhado"
+  | "contratado"
+  | "reprovado"
+  | "desistiu"
   | "novo"
   | "em_triagem"
   | "em_entrevista"
   | "em_teste"
-  | "aprovado"
-  | "reprovado"
-  | "desistiu"
-  | "contratado";
+  | "aprovado";
 
 const pillBase: CSSProperties = {
   display: "inline-flex",
@@ -27,8 +31,12 @@ const map: Record<Status, CSSProperties> = {
   em_selecao: { background: "var(--berry-light)", color: "var(--status-lavender-fg)" },
   fechada: { background: "var(--n100)", color: "var(--n500)" },
   cancelada: { background: "var(--n100)", color: "var(--n500)" },
+  inscrito: { background: "var(--berry-light)", color: "var(--status-lavender-fg)" },
+  abordado: { background: "var(--warn-bg)", color: "var(--warn-fg)" },
+  qualificado: { background: "var(--status-interview-bg)", color: "var(--status-interview-fg)" },
+  encaminhado: { background: "var(--status-test-bg)", color: "var(--status-test-fg)" },
   novo: { background: "var(--berry-light)", color: "var(--status-lavender-fg)" },
-  em_triagem: { background: "var(--berry-light)", color: "var(--status-lavender-fg)" },
+  em_triagem: { background: "var(--warn-bg)", color: "var(--warn-fg)" },
   em_entrevista: { background: "var(--status-interview-bg)", color: "var(--status-interview-fg)" },
   em_teste: { background: "var(--status-test-bg)", color: "var(--status-test-fg)" },
   aprovado: { background: "var(--status-interview-bg)", color: "var(--status-interview-fg)" },

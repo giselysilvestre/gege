@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
 import { normalizePercentScore } from "@/lib/score";
+import { nextCandidaturaStatus } from "@/lib/candidatura-status";
 import {
   buildExperienciaResumoLinha,
   candidatoAlertaInstabilidade,
@@ -40,22 +41,6 @@ export type CandidatoInscricaoRow = {
   };
 };
 
-/** Sequência no banco: novo → em_triagem → em_entrevista → em_teste → contratado */
-function nextDbStatus(current: string): string | null {
-  switch (current) {
-    case "novo":
-      return "em_triagem";
-    case "em_triagem":
-      return "em_entrevista";
-    case "em_entrevista":
-      return "em_teste";
-    case "em_teste":
-    case "aprovado":
-      return "contratado";
-    default:
-      return null;
-  }
-}
 
 const tagBase: CSSProperties = {
   fontSize: "10px",
@@ -120,7 +105,7 @@ export function CandidatoInscricaoCard({
   const scoreVal = normalizePercentScore(c.score);
   const instab = candidatoAlertaInstabilidade(c);
   const semExp = candidatoSemExperiencia(c);
-  const proxDb = nextDbStatus(row.status);
+  const proxDb = nextCandidaturaStatus(row.status);
   const detailHref = `/${clienteSlug}/candidatos/${c.id}?vaga=${row.vagaId}`;
   const resumoExperiencias = buildExperienciaResumoLinha(c);
   const empTag = employmentSituationTag(c.situacao_emprego);

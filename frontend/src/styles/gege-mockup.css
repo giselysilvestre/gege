@@ -625,13 +625,17 @@ a.cand-detail-acoes-link {
   display: inline-flex; align-items: center;
   font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: var(--radius-pill);
 }
-.ep-inscrito   { background: var(--gray-100);      color: var(--gray-600); }
+.ep-inscrito     { background: var(--gray-100);      color: var(--gray-600); }
+.ep-abordado     { background: var(--warn-bg);        color: var(--warn-fg); }
+.ep-qualificado  { background: var(--berry-light);    color: var(--berry-dark); }
+.ep-encaminhado  { background: var(--info-bg);        color: var(--info-fg); }
+.ep-contratado   { background: var(--success-bg);     color: var(--success-fg); }
+.ep-reprovado    { background: var(--danger-bg);      color: var(--danger-fg); }
+.ep-desistiu     { background: var(--gray-100);       color: var(--gray-500); }
+/* legado — mantido para dados antigos ainda não migrados */
 .ep-triagem    { background: var(--warn-bg);        color: var(--warn-fg); }
 .ep-entrevista { background: var(--berry-light);    color: var(--berry-dark); }
 .ep-teste      { background: var(--info-bg);        color: var(--info-fg); }
-.ep-contratado { background: var(--success-bg);     color: var(--success-fg); }
-.ep-reprovado  { background: var(--danger-bg);      color: var(--danger-fg); }
-.ep-desistiu   { background: var(--gray-100);       color: var(--gray-500); }
 
 /* Tag row */
 .tag-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }

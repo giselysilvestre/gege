@@ -6,6 +6,11 @@ import { vagaTituloPublico } from "@/lib/vaga-display";
 import type { CandidatoInscricaoRow } from "@/app/[clienteSlug]/candidatos/ui/CandidatoInscricaoCard";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { devError } from "@/lib/devLog";
+import {
+  type CandidaturaSummaryCounts,
+  emptySummaryCounts,
+  normalizeCandidaturaStatus,
+} from "@/lib/candidatura-status";
 
 export const dynamic = "force-dynamic";
 /** Colunas que existem em `vw_candidaturas_enriquecida` desde a migration 023.
@@ -60,14 +65,7 @@ function bestByCandidate(rows: CandidatoInscricaoRow[]): CandidatoInscricaoRow[]
   return [...byCand.values()].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
 }
 
-type SummaryCounts = {
-  todos: number;
-  triagem: number;
-  entrevista: number;
-  teste: number;
-  contratado: number;
-  desistiu: number;
-};
+type SummaryCounts = CandidaturaSummaryCounts;
 
 export async function GET(request: Request) {
   try {
@@ -150,23 +148,10 @@ async function handleCandidatosListGet(request: Request) {
   if (statusErr) {
     debug.summary_error = statusErr.message;
   }
-  const summaryCounts: SummaryCounts = {
-    todos: totalCandidaturas ?? 0,
-    triagem: 0,
-    entrevista: 0,
-    teste: 0,
-    contratado: 0,
-    desistiu: 0,
-  };
+  const summaryCounts: SummaryCounts = { ...emptySummaryCounts(), todos: totalCandidaturas ?? 0 };
   for (const row of (statusRows as Array<{ status: string | null }> | null) ?? []) {
-    const s = String(row.status || "");
-    if (s === "novo" || s === "em_triagem") summaryCounts.triagem += 1;
-    else if (s === "em_entrevista" || s === "entrevista" || s === "entrevistado")
-      summaryCounts.entrevista += 1;
-    else if (s === "em_teste" || s === "teste" || s === "aprovado" || s === "aprovado_teste")
-      summaryCounts.teste += 1;
-    else if (s === "contratado") summaryCounts.contratado += 1;
-    else if (s === "reprovado" || s === "desistiu") summaryCounts.desistiu += 1;
+    const key = normalizeCandidaturaStatus(String(row.status || ""));
+    if (key) summaryCounts[key] += 1;
   }
 
   const { data: vagasRows, error: vagasError } = await supabase
