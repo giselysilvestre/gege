@@ -11,6 +11,7 @@ import {
   CANDIDATURA_FUNIL_BOXES,
   CANDIDATURA_STATUS_RANK,
   type CandidaturaSummaryCounts,
+  type CandidaturaStatus,
   candidaturaStatusLabel,
   candidaturaStatusPill,
   emptySummaryCounts,
@@ -219,7 +220,7 @@ function CandidatosContent() {
       const apiVagaId = selectedVagaIds.length === 1 ? selectedVagaIds[0] : vagaFromQuery;
       if (apiVagaId) qs.set("vaga", apiVagaId);
       if (!statusTodos && statusKeys.length > 0) qs.set("status", statusKeys.join(","));
-      const res = await fetch(`/api/candidatos/list?${qs.toString()}`, { cache: "default" });
+      const res = await fetch(`/api/candidatos/list?${qs.toString()}`, { cache: "no-store" });
       const json = (await res.json()) as {
         rows?: CandidatoInscricaoRow[];
         vagasAtivas?: Array<{ id: string; cargo: string; titulo_publicacao?: string | null }>;
@@ -347,6 +348,28 @@ function CandidatosContent() {
     }
   }
 
+  function onStageBoxClick(key: keyof CandidaturaSummaryCounts) {
+    if (key === "todos") {
+      setStatusTodos(true);
+      setStatusKeys([]);
+    } else {
+      const k = key as CandidaturaStatus;
+      if (!statusTodos && statusKeys.length === 1 && statusKeys[0] === k) {
+        setStatusTodos(true);
+        setStatusKeys([]);
+      } else {
+        setStatusTodos(false);
+        setStatusKeys([k]);
+      }
+    }
+    setPage(1);
+  }
+
+  function stageBoxActive(key: keyof CandidaturaSummaryCounts): boolean {
+    if (key === "todos") return statusTodos;
+    return !statusTodos && statusKeys.includes(key as CandidaturaStatus);
+  }
+
   async function onAction(candidaturaId: string, action: "proxima" | "reprovar" | "desistiu" | "whatsapp", tel: string) {
     if (action === "whatsapp" && tel) {
       const wa = tel.replace(/\D/g, "");
@@ -420,14 +443,17 @@ function CandidatosContent() {
 
       <div className="stage-boxes mb16">
         {stageBoxes.map((b) => (
-          <div
+          <button
             key={b.key}
-            className="stage-box"
-            style={{ cursor: "default", pointerEvents: "none" }}
+            type="button"
+            className={`stage-box${stageBoxActive(b.key) ? " active" : ""}`}
+            onClick={() => onStageBoxClick(b.key)}
+            aria-pressed={stageBoxActive(b.key)}
+            aria-label={`Filtrar por ${b.label}: ${b.n}`}
           >
             <div className="stage-box-n">{b.n}</div>
             <div className="stage-box-l">{b.label}</div>
-          </div>
+          </button>
         ))}
       </div>
       <div className="stage-summary-mobile mb16">

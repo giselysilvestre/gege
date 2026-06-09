@@ -648,7 +648,9 @@ a.cand-detail-acoes-link {
   background: white; border: 1px solid var(--gray-200);
   border-radius: var(--radius-lg); padding: 14px 18px;
   flex: 1; min-width: 90px; cursor: pointer; transition: all 0.15s; text-align: center;
+  font: inherit; color: inherit; width: auto;
 }
+button.stage-box { appearance: none; display: block; }
 .stage-box:hover  { border-color: var(--olive); }
 .stage-box.active { border-color: var(--olive); background: var(--olive-light); }
 .stage-box-n { font-size: 26px; font-weight: 800; letter-spacing: -1px; line-height: 1; }
