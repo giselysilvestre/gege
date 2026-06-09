@@ -222,6 +222,8 @@ function CandidatosContent() {
       const apiVagaId = selectedVagaIds.length === 1 ? selectedVagaIds[0] : vagaFromQuery;
       if (apiVagaId) qs.set("vaga", apiVagaId);
       if (!statusTodos && statusKeys.length > 0) qs.set("status", statusKeys.join(","));
+      qs.set("sort", sortBy);
+      qs.set("dir", sortDir);
       const headers: HeadersInit = {};
       if (supabase) {
         const { data: sess } = await supabase.auth.getSession();
@@ -264,7 +266,7 @@ function CandidatosContent() {
       setHasMore(false);
     }
     setLoading(false);
-  }, [page, vagaFromQuery, slug, selectedVagaIds, statusTodos, statusKeys, supabase]);
+  }, [page, vagaFromQuery, slug, selectedVagaIds, statusTodos, statusKeys, sortBy, sortDir, supabase]);
 
   useEffect(() => {
     void load();

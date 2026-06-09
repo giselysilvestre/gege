@@ -20,7 +20,41 @@ export const dynamic = "force-dynamic";
  * Campos exp_* extras entram após aplicar `030_view_candidaturas_enriquecida_experiencia.sql` no Supabase;
  * não incluir aqui antes disso quebra o PostgREST (lista vazia / 500). */
 const ENRICHED_COLUMNS =
-  "candidatura_id,vaga_id,cliente_id,status,enviado_em,atualizado_em,distancia_km,tags_candidatura,candidato_id,candidato_nome,candidato_telefone,candidato_bairro,candidato_cidade,candidato_data_nascimento,candidato_situacao_emprego,vaga_cargo,vaga_titulo_publicacao,score_ia_atual,tags_analise,ultima_experiencia";
+  "candidatura_id,vaga_id,cliente_id,status,enviado_em,atualizado_em,distancia_km,tags_candidatura,candidato_id,candidato_nome,candidato_telefone,candidato_bairro,candidato_cidade,candidato_data_nascimento,candidato_situacao_emprego,vaga_cargo,vaga_titulo_publicacao,score_ia_atual,score_pos_entrevista,tags_analise,ultima_experiencia";
+
+type ListSortKey = "candidato" | "score" | "score_entrevista" | "etapa" | "inscricao";
+const LIST_SORT_KEYS: ListSortKey[] = ["candidato", "score", "score_entrevista", "etapa", "inscricao"];
+const LIST_SORT_COLUMN: Record<ListSortKey, string> = {
+  candidato: "candidato_nome",
+  score: "score_ia_atual",
+  score_entrevista: "score_pos_entrevista",
+  etapa: "status",
+  inscricao: "enviado_em",
+};
+
+function parseListSort(reqUrl: URL): { sortBy: ListSortKey; ascending: boolean } {
+  const sortRaw = (reqUrl.searchParams.get("sort") ?? "").trim();
+  const sortBy = LIST_SORT_KEYS.includes(sortRaw as ListSortKey) ? (sortRaw as ListSortKey) : "score_entrevista";
+  const dirRaw = (reqUrl.searchParams.get("dir") ?? "").trim();
+  const ascending = dirRaw === "asc";
+  return { sortBy, ascending };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyListOrder(query: any, sortBy: ListSortKey, ascending: boolean) {
+  const nullsFirst = ascending;
+  let q = query.order(LIST_SORT_COLUMN[sortBy], { ascending, nullsFirst });
+  if (sortBy !== "score_entrevista") {
+    q = q.order("score_pos_entrevista", { ascending: false, nullsFirst: false });
+  }
+  if (sortBy !== "score") {
+    q = q.order("score_ia_atual", { ascending: false, nullsFirst: false });
+  }
+  if (sortBy !== "candidato") {
+    q = q.order("candidato_nome", { ascending: true });
+  }
+  return q;
+}
 
 function normalizeScoreEntrevista(raw: unknown): number | null {
   if (raw == null || raw === "") return null;
@@ -99,6 +133,7 @@ async function handleCandidatosListGet(request: Request) {
   const statusDbValues =
     statusFilterKeys.length > 0 ? dbStatusValuesForFilter(statusFilterKeys) : null;
   const clienteSlug = reqUrl.searchParams.get('clienteSlug')?.trim() || null
+  const { sortBy, ascending } = parseListSort(reqUrl);
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
@@ -194,9 +229,7 @@ async function handleCandidatosListGet(request: Request) {
     .eq("cliente_id", cliente.id);
   if (vagaFilter) enrQuery = enrQuery.eq("vaga_id", vagaFilter);
   if (statusDbValues?.length) enrQuery = enrQuery.in("status", statusDbValues);
-  const { data: enrRows, error: enrError } = await enrQuery
-    .order("enviado_em", { ascending: false })
-    .range(from, to);
+  const { data: enrRows, error: enrError } = await applyListOrder(enrQuery, sortBy, ascending).range(from, to);
 
   let base = (enrRows as unknown as Array<Record<string, unknown>> | null) ?? [];
   if (enrError) {
@@ -209,9 +242,7 @@ async function handleCandidatosListGet(request: Request) {
         .eq("cliente_id", cliente.id);
       if (vagaFilter) adminQuery = adminQuery.eq("vaga_id", vagaFilter);
       if (statusDbValues?.length) adminQuery = adminQuery.in("status", statusDbValues);
-      const resAdmin = await adminQuery
-        .order("enviado_em", { ascending: false })
-        .range(from, to);
+      const resAdmin = await applyListOrder(adminQuery, sortBy, ascending).range(from, to);
       if (!resAdmin.error) {
         base = (resAdmin.data as unknown as Array<Record<string, unknown>> | null) ?? [];
         debug.enriquecida_admin_fallback = true;
