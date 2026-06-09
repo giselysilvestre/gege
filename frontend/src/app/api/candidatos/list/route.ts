@@ -216,10 +216,10 @@ async function handleCandidatosListGet(request: Request) {
         base = (resAdmin.data as unknown as Array<Record<string, unknown>> | null) ?? [];
         debug.enriquecida_admin_fallback = true;
       } else {
-        return jsonWithOptionalDebug({ message: resAdmin.error.message }, { ...debug, etapa: "enriquecida" }, { status: 500 });
+        debug.enriquecida_admin_error = resAdmin.error.message;
       }
-    } catch {
-      return jsonWithOptionalDebug({ message: enrError.message }, { ...debug, etapa: "enriquecida" }, { status: 500 });
+    } catch (adminErr) {
+      debug.enriquecida_admin_error = adminErr instanceof Error ? adminErr.message : String(adminErr);
     }
   }
   debug.candidaturas_lidas = base.length;

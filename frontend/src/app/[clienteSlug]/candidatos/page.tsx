@@ -157,6 +157,7 @@ function CandidatosContent() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">(CANDIDATOS_LIST_DEFAULTS.sortDir);
   const [page, setPage] = useState(CANDIDATOS_LIST_DEFAULTS.page);
   const [hasMore, setHasMore] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const PAGE_SIZE = 100;
   const supabase = useSupabaseBrowser();
 
@@ -202,6 +203,7 @@ function CandidatosContent() {
   }, [listQueryString, pathname, router, searchParams, slug]);
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const cli = await getClienteBySlug(slug)
       if (!cli?.id) {
@@ -220,7 +222,17 @@ function CandidatosContent() {
       const apiVagaId = selectedVagaIds.length === 1 ? selectedVagaIds[0] : vagaFromQuery;
       if (apiVagaId) qs.set("vaga", apiVagaId);
       if (!statusTodos && statusKeys.length > 0) qs.set("status", statusKeys.join(","));
-      const res = await fetch(`/api/candidatos/list?${qs.toString()}`, { cache: "no-store" });
+      const headers: HeadersInit = {};
+      if (supabase) {
+        const { data: sess } = await supabase.auth.getSession();
+        const token = sess.session?.access_token;
+        if (token) headers.Authorization = `Bearer ${token}`;
+      }
+      const res = await fetch(`/api/candidatos/list?${qs.toString()}`, {
+        cache: "no-store",
+        credentials: "include",
+        headers,
+      });
       const json = (await res.json()) as {
         rows?: CandidatoInscricaoRow[];
         vagasAtivas?: Array<{ id: string; cargo: string; titulo_publicacao?: string | null }>;
@@ -233,25 +245,26 @@ function CandidatosContent() {
         setNoCliente(res.status === 401);
         setRawRows([]);
         setVagasAtivas([]);
-        setSummaryCounts(null);
+        setSummaryCounts((prev) => (res.status === 401 ? null : prev));
         setHasMore(false);
+        setLoadError(json.message ?? "Não foi possível carregar os candidatos.");
         setLoading(false);
         return;
       }
       setNoCliente(false);
       setRawRows(json.rows ?? []);
       setVagasAtivas(json.vagasAtivas ?? []);
-      setSummaryCounts(json.summaryCounts ?? null);
+      if (json.summaryCounts) setSummaryCounts(json.summaryCounts);
       setHasMore(Boolean(json.hasMore));
+      if (json.message && !(json.rows?.length)) setLoadError(json.message);
     } catch {
       setNoCliente(false);
       setRawRows([]);
-      setVagasAtivas([]);
-      setSummaryCounts(null);
+      setLoadError("Erro de rede ao carregar candidatos.");
       setHasMore(false);
     }
     setLoading(false);
-  }, [page, vagaFromQuery, slug, selectedVagaIds, statusTodos, statusKeys]);
+  }, [page, vagaFromQuery, slug, selectedVagaIds, statusTodos, statusKeys, supabase]);
 
   useEffect(() => {
     void load();
@@ -474,6 +487,9 @@ function CandidatosContent() {
       <ActiveFilterChips chips={activeChips} onClearAll={clearAllFilters} />
 
       {noCliente ? <p className="fs13 mb16" style={{ color: "var(--danger-fg)" }}>Faça login para ver candidatos.</p> : null}
+      {!noCliente && loadError ? (
+        <p className="fs13 mb16" style={{ color: "var(--danger-fg)" }}>{loadError}</p>
+      ) : null}
       {!noCliente && kmMax < 50 && !hasDistanceData ? (
         <p className="fs12 c500 mb12">Filtro de distância indisponível agora (ainda não há dados de distância nesta lista).</p>
       ) : null}

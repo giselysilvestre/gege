@@ -134,12 +134,30 @@ for (const [legacy, target] of Object.entries(LEGACY_STATUS_MAP)) {
   (LEGACY_BY_TARGET[target] ??= []).push(legacy);
 }
 
-/** Valores de `status` no banco para um filtro da UI (inclui status legados). */
+/** Enum `status_candidatura` no Postgres — PostgREST rejeita valores fora desta lista. */
+const POSTGRES_STATUS_ENUM = new Set<string>([
+  "abordado",
+  "aprovado",
+  "contratado",
+  "desistiu",
+  "em_entrevista",
+  "em_teste",
+  "em_triagem",
+  "encaminhado",
+  "inscrito",
+  "novo",
+  "qualificado",
+  "reprovado",
+]);
+
+/** Valores de `status` no banco para um filtro da UI (só entradas válidas no enum). */
 export function dbStatusValuesForFilter(keys: readonly CandidaturaStatus[]): string[] {
   const out = new Set<string>();
   for (const k of keys) {
-    out.add(k);
-    for (const legacy of LEGACY_BY_TARGET[k] ?? []) out.add(legacy);
+    if (POSTGRES_STATUS_ENUM.has(k)) out.add(k);
+    for (const legacy of LEGACY_BY_TARGET[k] ?? []) {
+      if (POSTGRES_STATUS_ENUM.has(legacy)) out.add(legacy);
+    }
   }
   return [...out];
 }
