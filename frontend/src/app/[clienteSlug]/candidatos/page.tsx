@@ -216,7 +216,9 @@ function CandidatosContent() {
         pageSize: String(PAGE_SIZE),
       });
       qs.set("clienteSlug", slug);
-      if (vagaFromQuery) qs.set("vaga", vagaFromQuery);
+      const apiVagaId = selectedVagaIds.length === 1 ? selectedVagaIds[0] : vagaFromQuery;
+      if (apiVagaId) qs.set("vaga", apiVagaId);
+      if (!statusTodos && statusKeys.length > 0) qs.set("status", statusKeys.join(","));
       const res = await fetch(`/api/candidatos/list?${qs.toString()}`, { cache: "default" });
       const json = (await res.json()) as {
         rows?: CandidatoInscricaoRow[];
@@ -248,7 +250,7 @@ function CandidatosContent() {
       setHasMore(false);
     }
     setLoading(false);
-  }, [page, vagaFromQuery]);
+  }, [page, vagaFromQuery, slug, selectedVagaIds, statusTodos, statusKeys]);
 
   useEffect(() => {
     void load();
@@ -316,7 +318,10 @@ function CandidatosContent() {
         chips.push({
           key: `status:${k}`,
           label: `Status: ${STATUS_FILTRO_LABELS[k]}`,
-          onRemove: () => setStatusKeys((prev) => prev.filter((x) => x !== k)),
+          onRemove: () => {
+            setStatusKeys((prev) => prev.filter((x) => x !== k));
+            setPage(1);
+          },
         });
       });
     }
@@ -388,7 +393,10 @@ function CandidatosContent() {
           <CandidatosFiltersBar
             vagasAtivas={vagasAtivas}
             selectedVagaIds={selectedVagaIds}
-            onChangeVagas={setSelectedVagaIds}
+            onChangeVagas={(ids) => {
+              setSelectedVagaIds(ids);
+              setPage(1);
+            }}
             availableTags={availableTags}
             selectedTags={selectedTags}
             onToggleTag={(tag) => setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag]))}
@@ -397,10 +405,12 @@ function CandidatosContent() {
             onChangeStatusTodos={(v) => {
               setStatusTodos(v);
               if (v) setStatusKeys([]);
+              setPage(1);
             }}
             onToggleStatusKey={(k) => {
               setStatusTodos(false);
               setStatusKeys((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
+              setPage(1);
             }}
             kmMax={kmMax}
             onChangeKmMax={setKmMax}
@@ -648,7 +658,10 @@ function CandidatosContent() {
       {!noCliente && (tableRows.length > 0 || page > 1) ? (
         <div className="flex aic jsb mt16">
           <p className="fs12 c500">
-            Página {currentPage} · {tableRows.length} candidatos carregados
+            Página {currentPage} · {tableRows.length} candidato{tableRows.length === 1 ? "" : "s"}
+            {!statusTodos && statusKeys.length > 0 && summaryCounts
+              ? ` (filtro: ${statusKeys.map((k) => STATUS_FILTRO_LABELS[k]).join(", ")})`
+              : ""}
           </p>
           <div className="flex aic g8">
             <button type="button" className="btn btn-ghost btn-sm" disabled={currentPage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>

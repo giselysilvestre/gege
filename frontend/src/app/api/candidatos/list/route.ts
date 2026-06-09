@@ -7,7 +7,10 @@ import type { CandidatoInscricaoRow } from "@/app/[clienteSlug]/candidatos/ui/Ca
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { devError } from "@/lib/devLog";
 import {
+  CANDIDATURA_STATUSES,
+  type CandidaturaStatus,
   type CandidaturaSummaryCounts,
+  dbStatusValuesForFilter,
   emptySummaryCounts,
   normalizeCandidaturaStatus,
 } from "@/lib/candidatura-status";
@@ -86,6 +89,15 @@ async function handleCandidatosListGet(request: Request) {
   const page = parsePositiveInt(reqUrl.searchParams.get("page"), 1);
   const pageSize = Math.min(200, parsePositiveInt(reqUrl.searchParams.get("pageSize"), 100));
   const vagaFilter = reqUrl.searchParams.get("vaga")?.trim() || null;
+  const statusFilterRaw = (reqUrl.searchParams.get("status") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const statusFilterKeys = statusFilterRaw.filter((s): s is CandidaturaStatus =>
+    (CANDIDATURA_STATUSES as readonly string[]).includes(s)
+  );
+  const statusDbValues =
+    statusFilterKeys.length > 0 ? dbStatusValuesForFilter(statusFilterKeys) : null;
   const clienteSlug = reqUrl.searchParams.get('clienteSlug')?.trim() || null
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
@@ -181,6 +193,7 @@ async function handleCandidatosListGet(request: Request) {
     .select(ENRICHED_COLUMNS)
     .eq("cliente_id", cliente.id);
   if (vagaFilter) enrQuery = enrQuery.eq("vaga_id", vagaFilter);
+  if (statusDbValues?.length) enrQuery = enrQuery.in("status", statusDbValues);
   const { data: enrRows, error: enrError } = await enrQuery
     .order("enviado_em", { ascending: false })
     .range(from, to);
@@ -195,6 +208,7 @@ async function handleCandidatosListGet(request: Request) {
         .select(ENRICHED_COLUMNS)
         .eq("cliente_id", cliente.id);
       if (vagaFilter) adminQuery = adminQuery.eq("vaga_id", vagaFilter);
+      if (statusDbValues?.length) adminQuery = adminQuery.in("status", statusDbValues);
       const resAdmin = await adminQuery
         .order("enviado_em", { ascending: false })
         .range(from, to);

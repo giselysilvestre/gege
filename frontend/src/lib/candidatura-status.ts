@@ -129,6 +129,21 @@ export function summaryCountForStatus(raw: string | null | undefined): keyof Omi
   return s;
 }
 
+const LEGACY_BY_TARGET: Partial<Record<CandidaturaStatus, string[]>> = {};
+for (const [legacy, target] of Object.entries(LEGACY_STATUS_MAP)) {
+  (LEGACY_BY_TARGET[target] ??= []).push(legacy);
+}
+
+/** Valores de `status` no banco para um filtro da UI (inclui status legados). */
+export function dbStatusValuesForFilter(keys: readonly CandidaturaStatus[]): string[] {
+  const out = new Set<string>();
+  for (const k of keys) {
+    out.add(k);
+    for (const legacy of LEGACY_BY_TARGET[k] ?? []) out.add(legacy);
+  }
+  return [...out];
+}
+
 export const CANDIDATURA_FUNIL_BOXES: Array<{ key: keyof CandidaturaSummaryCounts; label: string }> = [
   { key: "todos", label: "Todos" },
   { key: "inscrito", label: "Inscrito" },
