@@ -31,7 +31,7 @@ function getGroqClient() {
 
 const PORT = Number(process.env.PORT || 3333);
 const KAPSO_PHONE_NUMBER_ID = process.env.KAPSO_PHONE_NUMBER_ID || "";
-const APP_VERSION = "webhook-kapso-v2-batch-2026-06-04";
+const APP_VERSION = "webhook-inbound-status-fix-2026-06-10";
 
 const MENSAGEM_SEM_AGENDAMENTO =
   "obrigada por responder! vou encaminhar seu perfil pro time do cliente analisar. se você for selecionado pra próxima etapa, o próprio time entra em contato com você — eu não marco entrevista por aqui. qualquer dúvida, pode mandar mensagem.";

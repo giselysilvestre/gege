@@ -51,8 +51,10 @@ function extractKapsoInboundFromPayload(payload) {
     return { skip: true, reason: "not_inbound" };
   }
 
+  // Kapso marca inbounds como "delivered"/"read" (entrega ao negócio). Só filtrar
+  // status de envio quando a direção é explicitamente outbound.
   const status = String(msg.kapso?.status || msg.status || "").toLowerCase();
-  if (status === "sent" || status === "delivered" || status === "read") {
+  if (direction === "outbound" && (status === "sent" || status === "delivered" || status === "read")) {
     return { skip: true, reason: "outbound_status" };
   }
 
