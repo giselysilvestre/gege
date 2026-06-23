@@ -20,7 +20,7 @@
  *   --limit=N       → no máximo N pessoas (ordem = resultado da query)
  *   --candidatura=  → só essa candidatura (precisa ser elegível)
  *   --candidato=    → só esse candidato_id (precisa ser elegível p/ essa vaga)
- *   --status=inscrito|novo|any  → por padrão filtra status=inscrito; use any para ignorar status
+ *   --status=inscrito_aguardando_disparo|inscrito|novo|any  → padrão inscrito_aguardando_disparo; aliases inscrito/novo; use any para ignorar status
  *   --score-min=N      → nota mínima em score_ia (padrão 75)
  *   --fit=Alto|Médio|Baixo|any  → fit exigido (padrão Alto)
  *   --ignorar-disponivel → não exige candidato.disponivel=true
@@ -50,6 +50,7 @@ if (!KAPSO_API_KEY || !KAPSO_PHONE_NUMBER_ID) {
   process.exit(1);
 }
 
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 const args = process.argv.slice(2).reduce((acc, arg) => {
@@ -63,8 +64,13 @@ const DRY_RUN = !!args["dry-run"];
 const LIMIT = args.limit ? parseInt(args.limit, 10) : null;
 const CANDIDATURA_ID = args.candidatura || null;
 const CANDIDATO_ID = args.candidato || null;
-const STATUS_FILTER_RAW = (args.status || "inscrito").toLowerCase();
-const STATUS_FILTER = STATUS_FILTER_RAW === "novo" ? "inscrito" : STATUS_FILTER_RAW;
+const STATUS_FILTER_DEFAULT = "inscrito_aguardando_disparo";
+const LEGACY_STATUS_ALIASES = {
+  novo: STATUS_FILTER_DEFAULT,
+  inscrito: STATUS_FILTER_DEFAULT,
+};
+const STATUS_FILTER_RAW = (args.status || STATUS_FILTER_DEFAULT).toLowerCase();
+const STATUS_FILTER = LEGACY_STATUS_ALIASES[STATUS_FILTER_RAW] ?? STATUS_FILTER_RAW;
 const SCORE_MIN = args["score-min"] ? Number(args["score-min"]) : 75;
 const FIT_FILTER_RAW = args.fit || "Alto";
 const FIT_FILTER = String(FIT_FILTER_RAW).toLowerCase();
@@ -144,22 +150,58 @@ async function main() {
   const cargoTemplate = (vaga.titulo_publicacao || vaga.cargo || "vaga").trim();
   console.log(`✅ Vaga: ${cargoTemplate}`);
 
-  let candidaturasQuery = supabase
-    .from("candidaturas")
-    .select(
-      `id, candidato_id, score_compatibilidade, status,
-       candidato:candidatos(id, nome, telefone, disponivel,
-         analise:candidatos_analise(score_ia, score_final, fit_food_service))`
-    )
-    .eq("vaga_id", VAGA_ID);
-  if (STATUS_FILTER !== "any") {
-    candidaturasQuery = candidaturasQuery.eq("status", STATUS_FILTER);
-  }
-  const { data: candidaturas, error: candErr } = await candidaturasQuery;
+  const candidaturaSelect =
+    `id, candidato_id, score_compatibilidade, status,
+     candidato:candidatos(id, nome, telefone, disponivel,
+       analise:candidatos_analise(score_ia, score_final, fit_food_service))`;
 
-  if (candErr) {
-    console.error("❌ Erro ao buscar candidaturas:", candErr);
-    process.exit(1);
+  let candidaturas = [];
+
+  if (CANDIDATURA_ID) {
+    const { data, error: candErr } = await supabase
+      .from("candidaturas")
+      .select(candidaturaSelect)
+      .eq("id", CANDIDATURA_ID)
+      .eq("vaga_id", VAGA_ID)
+      .maybeSingle();
+    if (candErr) {
+      console.error("❌ Erro ao buscar candidatura:", candErr);
+      process.exit(1);
+    }
+    candidaturas = data ? [data] : [];
+  } else if (CANDIDATO_ID) {
+    let q = supabase
+      .from("candidaturas")
+      .select(candidaturaSelect)
+      .eq("vaga_id", VAGA_ID)
+      .eq("candidato_id", CANDIDATO_ID);
+    if (STATUS_FILTER !== "any") q = q.eq("status", STATUS_FILTER);
+    const { data, error: candErr } = await q;
+    if (candErr) {
+      console.error("❌ Erro ao buscar candidatura:", candErr);
+      process.exit(1);
+    }
+    candidaturas = data || [];
+  } else {
+    let page = 0;
+    const pageSize = 1000;
+    while (true) {
+      let q = supabase
+        .from("candidaturas")
+        .select(candidaturaSelect)
+        .eq("vaga_id", VAGA_ID)
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+      if (STATUS_FILTER !== "any") q = q.eq("status", STATUS_FILTER);
+      const { data, error: candErr } = await q;
+      if (candErr) {
+        console.error("❌ Erro ao buscar candidaturas:", candErr);
+        process.exit(1);
+      }
+      if (!data?.length) break;
+      candidaturas.push(...data);
+      if (data.length < pageSize) break;
+      page += 1;
+    }
   }
 
   console.log(
@@ -190,17 +232,22 @@ async function main() {
   const candidatoIds = elegiveis.map((c) => c.candidato_id);
   let comSessaoAtiva = new Set();
   if (candidatoIds.length > 0) {
-    const { data: sessoesAtivas, error: sessErr } = await supabase
-      .from("whatsapp_sessoes")
-      .select("candidato_id")
-      .eq("status", "ativo")
-      .in("candidato_id", candidatoIds);
+    const idsToCheck = CANDIDATO_ID ? [CANDIDATO_ID] : candidatoIds;
+    const CHUNK = 80;
+    for (let i = 0; i < idsToCheck.length; i += CHUNK) {
+      const chunk = idsToCheck.slice(i, i + CHUNK);
+      const { data: sessoesAtivas, error: sessErr } = await supabase
+        .from("whatsapp_sessoes")
+        .select("candidato_id")
+        .eq("status", "ativo")
+        .in("candidato_id", chunk);
 
-    if (sessErr) {
-      console.error("❌ Erro ao checar sessões ativas:", sessErr);
-      process.exit(1);
+      if (sessErr) {
+        console.error("❌ Erro ao checar sessões ativas:", sessErr);
+        process.exit(1);
+      }
+      for (const s of sessoesAtivas || []) comSessaoAtiva.add(s.candidato_id);
     }
-    comSessaoAtiva = new Set(sessoesAtivas.map((s) => s.candidato_id));
   }
 
   const paraDisparar = elegiveis.filter((c) => !comSessaoAtiva.has(c.candidato_id));

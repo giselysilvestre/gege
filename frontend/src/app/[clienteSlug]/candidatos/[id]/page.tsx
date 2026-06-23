@@ -5,12 +5,14 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSupabaseBrowser } from "@/lib/supabase/useSupabaseBrowser";
 import { displayScoreEntrevista, normalizePercentScore } from "@/lib/score";
+import { computeScoreFinal } from "@/lib/score-final";
 import { vagaTituloPublico } from "@/lib/vaga-display";
 import { devError } from "@/lib/devLog";
 import {
   candidaturaStatusLabel,
   candidaturaStatusPill,
   nextCandidaturaStatus,
+  reprovadoStatusForEtapa,
 } from "@/lib/candidatura-status";
 import { buildCandidatosBackHref } from "../ui/candidatosListQuery";
 
@@ -193,11 +195,11 @@ function entrevistaScoreForDisplay(a: CandidatoAnalise | null): number | null {
 function combinedAnaliseScoreForDisplay(a: CandidatoAnalise | null): number | null {
   if (!a) return null;
   const ia = normalizePercentScore(a.score_ia);
-  const pos = displayScoreEntrevista(a.score_pos_entrevista);
+  const pos = normalizePercentScore(a.score_pos_entrevista);
   if (ia == null || pos == null) return null;
   const db = normalizePercentScore(a.score_final);
   if (db != null) return db;
-  return normalizePercentScore(0.4 * ia + 0.6 * pos);
+  return computeScoreFinal(ia, pos);
 }
 
 function scoreCircleClass(score: number | null): string {
@@ -503,9 +505,11 @@ function CandidatoPerfilInner() {
 
   async function onReprovar() {
     if (!supabase || !candidatura?.id) return;
+    const reprovado = reprovadoStatusForEtapa(candidatura.status);
+    if (!reprovado) return;
     setBusy(true);
     try {
-      const { error } = await supabase.from("candidaturas").update({ status: "reprovado" }).eq("id", candidatura.id);
+      const { error } = await supabase.from("candidaturas").update({ status: reprovado }).eq("id", candidatura.id);
       if (error) {
         devError("[perfil] reprovar", error);
         return;

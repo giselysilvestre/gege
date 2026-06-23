@@ -17,6 +17,9 @@ import {
   emptySummaryCounts,
   nextCandidaturaStatus,
   normalizeCandidaturaStatus,
+  CANDIDATURA_STATUS_DESISTENCIA,
+  reprovadoStatusForEtapa,
+  summaryCountForStatus,
 } from "@/lib/candidatura-status";
 import { buildExperienciaResumoLinha } from "./ui/candidatosFormat";
 import { useSupabaseBrowser } from "@/lib/supabase/useSupabaseBrowser";
@@ -114,8 +117,8 @@ function compareCandidatoRows(a: CandidatoInscricaoRow, b: CandidatoInscricaoRow
   if (sortBy === "score_entrevista") cmp = scoreEnt(a) - scoreEnt(b);
   if (sortBy === "etapa") {
     cmp =
-      (stageRank[normalizeCandidaturaStatus(a.status) ?? "inscrito"] ?? -1) -
-      (stageRank[normalizeCandidaturaStatus(b.status) ?? "inscrito"] ?? -1);
+      (stageRank[normalizeCandidaturaStatus(a.status) ?? "inscrito_aguardando_disparo"] ?? -1) -
+      (stageRank[normalizeCandidaturaStatus(b.status) ?? "inscrito_aguardando_disparo"] ?? -1);
   }
   if (sortBy === "inscricao") {
     const ta = a.enviado_em ? new Date(a.enviado_em).getTime() : 0;
@@ -281,8 +284,8 @@ function CandidatosContent() {
     const counts = emptySummaryCounts();
     counts.todos = rawRows.length;
     for (const r of rawRows) {
-      const s = normalizeCandidaturaStatus(r.status);
-      if (s) counts[s] += 1;
+      const key = summaryCountForStatus(r.status);
+      if (key) counts[key] += 1;
     }
     return counts;
   }, [rawRows, summaryCounts]);
@@ -398,12 +401,18 @@ function CandidatosContent() {
     }
     if (!supabase) return;
     if (action === "reprovar") {
-      await supabase.from("candidaturas").update({ status: "reprovado" }).eq("id", candidaturaId);
+      const row = rawRows.find((r) => r.candidaturaId === candidaturaId);
+      const reprovado = reprovadoStatusForEtapa(row?.status);
+      if (!reprovado) return;
+      await supabase.from("candidaturas").update({ status: reprovado }).eq("id", candidaturaId);
       await load();
       return;
     }
     if (action === "desistiu") {
-      await supabase.from("candidaturas").update({ status: "desistiu" }).eq("id", candidaturaId);
+      await supabase
+        .from("candidaturas")
+        .update({ status: CANDIDATURA_STATUS_DESISTENCIA })
+        .eq("id", candidaturaId);
       await load();
       return;
     }
@@ -472,7 +481,7 @@ function CandidatosContent() {
         ))}
       </div>
       <div className="stage-summary-mobile mb16">
-        {CANDIDATURA_FUNIL_BOXES.filter((b) => b.key !== "reprovado" && b.key !== "desistiu").map((b) => ({
+        {CANDIDATURA_FUNIL_BOXES.map((b) => ({
           n: stageCounts[b.key],
           label: b.label,
         })).map((s) => (

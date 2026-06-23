@@ -4,6 +4,7 @@ import { assertAdminEnv, getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getSupabaseRouteHandlerClient } from "@/lib/supabase/server";
 import { getCurrentCliente } from "@/lib/data";
 import { calcularScore, type ScoreCalcCandidato } from "@/lib/score-calc";
+import { CANDIDATURA_STATUS_INICIAL } from "@/lib/candidatura-status";
 
 export const dynamic = "force-dynamic";
 
@@ -106,7 +107,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       return {
         candidato_id: c.id,
         vaga_id: vagaId,
-        status: "novo" as const,
+        status: CANDIDATURA_STATUS_INICIAL,
         score_compatibilidade,
         tags,
       };
@@ -132,7 +133,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const top = ranked.map((r) => ({
     candidato_id: r.candidato_id,
     vaga_id: r.vaga_id,
-    status: (statusByCand.get(r.candidato_id) ?? "novo") as string,
+    status: (statusByCand.get(r.candidato_id) ?? CANDIDATURA_STATUS_INICIAL) as string,
     score_compatibilidade: r.score_compatibilidade,
     tags: r.tags,
   }));

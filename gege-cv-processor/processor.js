@@ -7,6 +7,15 @@ const { google } = require("googleapis");
 const pdfParse = require('pdf-parse');
 const Anthropic = require("@anthropic-ai/sdk");
 const { createClient } = require("@supabase/supabase-js");
+const { analyzeCvWithClaude, getCvAnalysisModelLabel } = require("./prompt-cv-gege");
+const { normalizeIsoDateField } = require("./cv-normalize");
+const {
+  sha256Buffer,
+  loadProcessedShaSets,
+  classifyPdfBySha,
+  isGmailMessageAlreadyAnalyzed,
+} = require("./cv-dedup");
+const { computeScoreFinal } = require("../shared/score-final");
 
 const CREDENTIALS_PATH = path.join(__dirname, "credentials.json");
 const TOKEN_PATH = path.join(__dirname, "token.json");
@@ -116,14 +125,6 @@ function toNullableInt(v) {
   return Math.round(n);
 }
 
-/** Igual ao schema Supabase: só IA → final = IA; IA + pós → 0,4×IA + 0,6×pós. */
-function computeScoreFinalFromIaEPos(scoreIa, scorePos) {
-  if (scoreIa == null && scorePos == null) return null;
-  if (scorePos == null) return scoreIa;
-  if (scoreIa == null) return scorePos;
-  return Number((0.4 * scoreIa + 0.6 * scorePos).toFixed(2));
-}
-
 function unwrapJsonOnly(text) {
   const raw = String(text || "").trim();
   if (!raw) throw new Error("Resposta vazia do Claude.");
@@ -220,64 +221,7 @@ async function uploadPdfToDrivePublic(drive, buffer, parentId, fileName) {
 }
 
 async function callClaude(anthropic, cvText) {
-  const hoje = new Date().toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit', year:'numeric'});
-  const prompt = `A data de hoje é ${hoje}. Use como referência absoluta para calcular durações, identificar empregos atuais e avaliar se datas são passadas ou futuras.
-
-Você é recrutador sênior em food service. Retorne APENAS JSON válido, sem markdown.
-
-{
-  "candidato": {
-    "nome": "Capitalizar cada palavra exceto preposições (da, de, do, dos, das, e)",
-    "telefone": "Formato +55 DD 9XXXX-XXXX ou null se incompleto/sem DDD",
-    "email": "minúsculo sem espaços ou null",
-    "cargo_principal": "cargo do último emprego ou null",
-    "cidade": "apenas se explícito ou null",
-    "bairro": "apenas se explícito ou null",
-    "cep": "formato 00000-000, apenas se explícito, não inferir, ou null",
-    "escolaridade": "nível mais alto concluído ou em andamento ou null",
-    "genero": "Masculino | Feminino | Não informado (inferir pelo primeiro nome)",
-    "data_nascimento": "YYYY-MM-DD se explícito, não inferir, ou null",
-    "situacao_emprego": "Empregado se: último emprego sem data de fim OU texto contém 'atual', 'atualmente', 'presente', 'até o momento'. Desempregado se último emprego tem data de fim anterior a hoje. null se não inferível."
-  },
-  "experiencias": [
-    {
-      "empresa": "nome da empresa",
-      "cargo": "cargo exercido ou null",
-      "setor": "alimentacao (restaurantes, catering, food service industrial, lanchonetes) | cozinha (função específica de preparo de alimentos) | atendimento (atendimento ao cliente DENTRO de food service — NÃO contar telemarketing, call center, banco, varejo geral) | lideranca (gestão de pessoas em food service) | outro (tudo fora de food service)",
-      "data_inicio": "YYYY-MM-DD ou null",
-      "data_fim": "YYYY-MM-DD ou null se emprego atual",
-      "meses": "calcular pelas datas usando hoje como referência para empregos sem data_fim. Estimar pelo texto se datas ausentes.",
-      "eh_lideranca": "true só se cargo envolve gestão direta de pessoas com evidência no texto (supervisor, gerente, coordenador com equipe descrita). false caso contrário.",
-      "crescimento_interno": "true só se houve mudança de cargo com escopo CRESCENTE na mesma empresa — títulos diferentes e progressão clara. NÃO marcar true para contratos distintos na mesma empresa sem progressão de cargo."
-    }
-  ],
-  "analise": {
-    "perfil_resumo": "cargo predominante + tempo total de experiência relevante em food service",
-    "pontos_fortes": "Texto corrido em linguagem natural, sem labels ou categorias em maiúsculo. Liste apenas evidências rastreáveis no CV, priorizando: permanência longa em food service (>18 meses = relevante, >36 meses = forte), empresa reconhecida do setor (Novotel, Accor, Outback, Coco Bambu, Madero, Fogo de Chão, Spoleto, Starbucks, Eataly, Fasano, McDonald's, Bob's, Subway, Sodexo, Compass), responsabilidades específicas descritas com verbos concretos, conquistas mensuráveis, progressão real de cargo, formação técnica com instituição identificável, iniciativa comprovada. NÃO aceitar autodeclaração, listas de habilidades ou objetivos profissionais. null se nenhuma evidência real.",
-    "red_flags": "Texto corrido em linguagem natural, sem labels ou categorias em maiúsculo. Liste apenas fatos concretos com trecho literal entre aspas quando disponível, priorizando por severidade: linguagem de conflito ou rescisão negociada (ex: 'fiz acordo', 'pedi pra sair pq'), inconsistência factual de datas, tenure médio abaixo de 6 meses em 2 ou mais empregos consecutivos, gap não explicado acima de 12 meses, CV sem nenhuma data, erros graves de português, mistura de setores sem fio condutor, zero experiência em food service. null se nenhum identificado.",
-    "fit_food_service": "Alto: experiência direta em food service com permanência acima de 12 meses. Médio: formação técnica específica em gastronomia com instituição identificável, OU experiência em atendimento dentro de food service. Baixo: sem experiência ou formação relevante para o setor.",
-    "analise_completa": "[Nome] é [cargo predominante] com [tempo de experiência relevante].\n\nO que chama atenção positivamente: [escolha O ÚNICO fato mais relevante dos pontos_fortes — não repita todos].\nO que preocupa: [escolha O ÚNICO fato mais grave dos red_flags — não repita todos].\nRecomendação: Chamar para triagem | Triagem com ressalva | Não priorizar — [fator decisivo em 1 linha direta, sem repetir o que já foi dito acima].",
-    "score_ia": "0-100 sem ancoragem em valores anteriores. Critérios: experiência direta e relevante em food service com permanência (40%), estabilidade dos vínculos (30%), evidências comportamentais positivas rastreáveis no texto (30%). Escala: 0-20 sem relevância, 21-40 baixa, 41-60 média, 61-80 boa aderência, 81-100 candidato forte.",
-    "ultima_experiencia": "Empresa — cargo, duração. Ex: Gastroservice — Cozinheira, 8 anos e 7 meses"
-  }
-}
-
-CV:
-"""${cvText}"""`;
-
-  const msg = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 2400,
-    temperature: 0,
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const text = (msg.content || [])
-    .filter((c) => c.type === "text")
-    .map((c) => c.text)
-    .join("\n");
-  const jsonText = unwrapJsonOnly(text);
-  return JSON.parse(jsonText);
+  return analyzeCvWithClaude(anthropic, cvText, { logCacheUsage: true });
 }
 
 function computeTags(experiencias) {
@@ -316,8 +260,13 @@ async function findDuplicateCandidatoId(supabase, telefone, email) {
   return null;
 }
 
-async function processEmail({ gmail, drive, anthropic, supabase, userId, rootFolderId, monthFolderId, messageId, idx, total }) {
+async function processEmail({ gmail, drive, anthropic, supabase, userId, rootFolderId, monthFolderId, messageId, idx, total, cacheSha, seenThisRun }) {
   console.log(`\n[${idx}/${total}] Processando email ${messageId}...`);
+
+  if (await isGmailMessageAlreadyAnalyzed(supabase, messageId)) {
+    console.log(" - email já analisado no Supabase, pulando.");
+    return { status: "skipped_already_analyzed" };
+  }
 
   const { message, pdfParts } = await getMessageAndPdfParts(gmail, userId, messageId);
   const fromHeader = getHeader(message.payload?.headers, "from");
@@ -337,6 +286,21 @@ async function processEmail({ gmail, drive, anthropic, supabase, userId, rootFol
   console.log(` - PDF encontrado: ${pdf.filename || "(sem nome)"}`);
 
   const pdfBuffer = await downloadAttachment(gmail, userId, messageId, pdf.attachmentId);
+  const sha = sha256Buffer(pdfBuffer);
+  const dedup = await classifyPdfBySha({ supabase, sha, cacheSha, seenThisRun });
+  if (dedup.status === "filtro1_cache") {
+    console.log(" - filtro1 (cache local), pulando.");
+    return { status: "skipped_cache" };
+  }
+  if (dedup.status === "filtro2_supabase") {
+    console.log(" - filtro2 (PDF já no Supabase), pulando.");
+    return { status: "skipped_supabase" };
+  }
+  if (dedup.status === "duplicata_mesma_execucao") {
+    console.log(" - duplicata na mesma execução, pulando.");
+    return { status: "skipped_duplicate" };
+  }
+
   const text = await extractPdfText(pdfBuffer);
   if (!text) {
     console.log(" - PDF sem texto extraível, pulando.");
@@ -360,6 +324,11 @@ async function processEmail({ gmail, drive, anthropic, supabase, userId, rootFol
   const fileName = `${safeName}_${messageId}.pdf`;
   const curriculoUrl = await uploadPdfToDrivePublic(drive, pdfBuffer, monthFolderId || rootFolderId, fileName);
 
+  const temLocalizacao =
+    toNullableString(cand.cidade) ||
+    toNullableString(cand.bairro) ||
+    toNullableString(cand.cep);
+
   const candidatoPayload = {
     nome,
     telefone: telefone || null,
@@ -370,7 +339,7 @@ async function processEmail({ gmail, drive, anthropic, supabase, userId, rootFol
     cep: toNullableString(cand.cep),
     escolaridade: toNullableString(cand.escolaridade),
     genero: toNullableString(cand.genero),
-    data_nascimento: toNullableString(cand.data_nascimento),
+    data_nascimento: normalizeIsoDateField(cand.data_nascimento),
     situacao_emprego: toNullableString(cand.situacao_emprego),
     origem,
     curriculo_url: curriculoUrl,
@@ -381,6 +350,16 @@ async function processEmail({ gmail, drive, anthropic, supabase, userId, rootFol
   let candidatoId;
 
   if (dupId) {
+    if (temLocalizacao) {
+      const { data: existente } = await supabase
+        .from("candidatos")
+        .select("localizacao_fonte")
+        .eq("id", dupId)
+        .maybeSingle();
+      if (existente?.localizacao_fonte !== "whatsapp_conversa") {
+        candidatoPayload.localizacao_fonte = "cv";
+      }
+    }
     const { error: upErr } = await supabase.from("candidatos").update(candidatoPayload).eq("id", dupId);
     if (upErr) throw new Error(`Falha ao atualizar candidato: ${upErr.message}`);
 
@@ -389,6 +368,7 @@ async function processEmail({ gmail, drive, anthropic, supabase, userId, rootFol
 
     candidatoId = dupId;
   } else {
+    if (temLocalizacao) candidatoPayload.localizacao_fonte = "cv";
     const { data: inserted, error: insErr } = await supabase.from("candidatos").insert(candidatoPayload).select("id").single();
     if (insErr) throw new Error(`Falha ao inserir candidato: ${insErr.message}`);
     candidatoId = inserted.id;
@@ -404,8 +384,8 @@ async function processEmail({ gmail, drive, anthropic, supabase, userId, rootFol
       empresa,
       cargo: toNullableString(e?.cargo),
       setor: String(e?.setor || "outro").replace(/\s/g, ""),
-      data_inicio: toNullableString(e?.data_inicio),
-      data_fim: toNullableString(e?.data_fim),
+      data_inicio: normalizeIsoDateField(e?.data_inicio),
+      data_fim: normalizeIsoDateField(e?.data_fim),
       meses: toNullableInt(e?.meses),
       eh_lideranca: typeof e?.eh_lideranca === "boolean" ? e.eh_lideranca : null,
       crescimento_interno: typeof e?.crescimento_interno === "boolean" ? e.crescimento_interno : null,
@@ -432,7 +412,7 @@ async function processEmail({ gmail, drive, anthropic, supabase, userId, rootFol
   const scoreIa = toNullableInt(analise.score_ia);
   const scorePosFromJson = toNullableInt(analise.score_pos_entrevista);
   const scorePosEff = scorePosFromJson ?? scorePosPersisted;
-  const scoreFinal = computeScoreFinalFromIaEPos(scoreIa, scorePosEff);
+  const scoreFinal = computeScoreFinal(scoreIa, scorePosEff);
 
   const fitRaw = analise.fit_food_service || '';
   const fitNormalized = ['Alto','Médio','Baixo'].find(v => fitRaw.startsWith(v)) || null;
@@ -449,7 +429,7 @@ async function processEmail({ gmail, drive, anthropic, supabase, userId, rootFol
     score_final: scoreFinal,
     tags,
     ultima_experiencia: toNullableString(analise.ultima_experiencia),
-    modelo_usado: "claude-sonnet-4-20250514",
+    modelo_usado: getCvAnalysisModelLabel(),
     processado_em: new Date().toISOString(),
   };
   if (scorePosFromJson != null) analisePayload.score_pos_entrevista = scorePosFromJson;
@@ -526,8 +506,14 @@ async function main() {
     skipped_empty_pdf: 0,
     skipped_no_name: 0,
     skipped_duplicate: 0,
+    skipped_already_analyzed: 0,
+    skipped_cache: 0,
+    skipped_supabase: 0,
     failed: 0,
   };
+
+  const cacheSha = loadProcessedShaSets();
+  const seenThisRun = new Set();
 
   for (let i = 0; i < total; i++) {
     const m = messages[i];
@@ -543,6 +529,8 @@ async function main() {
         messageId: m.id,
         idx: i + 1,
         total,
+        cacheSha,
+        seenThisRun,
       });
       if (res && stats[res.status] != null) stats[res.status] += 1;
     } catch (e) {

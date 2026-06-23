@@ -13,6 +13,7 @@ import {
   dbStatusValuesForFilter,
   emptySummaryCounts,
   normalizeCandidaturaStatus,
+  summaryCountForStatus,
 } from "@/lib/candidatura-status";
 
 export const dynamic = "force-dynamic";
@@ -20,13 +21,13 @@ export const dynamic = "force-dynamic";
  * Campos exp_* extras entram após aplicar `030_view_candidaturas_enriquecida_experiencia.sql` no Supabase;
  * não incluir aqui antes disso quebra o PostgREST (lista vazia / 500). */
 const ENRICHED_COLUMNS =
-  "candidatura_id,vaga_id,cliente_id,status,enviado_em,atualizado_em,distancia_km,tags_candidatura,candidato_id,candidato_nome,candidato_telefone,candidato_bairro,candidato_cidade,candidato_data_nascimento,candidato_situacao_emprego,vaga_cargo,vaga_titulo_publicacao,score_ia_atual,score_pos_entrevista,tags_analise,ultima_experiencia";
+  "candidatura_id,vaga_id,cliente_id,status,enviado_em,atualizado_em,distancia_km,tags_candidatura,candidato_id,candidato_nome,candidato_telefone,candidato_bairro,candidato_cidade,candidato_data_nascimento,candidato_situacao_emprego,vaga_cargo,vaga_titulo_publicacao,score_ia,score_pos_entrevista,tags_analise,ultima_experiencia,arquivada";
 
 type ListSortKey = "candidato" | "score" | "score_entrevista" | "etapa" | "inscricao";
 const LIST_SORT_KEYS: ListSortKey[] = ["candidato", "score", "score_entrevista", "etapa", "inscricao"];
 const LIST_SORT_COLUMN: Record<ListSortKey, string> = {
   candidato: "candidato_nome",
-  score: "score_ia_atual",
+  score: "score_ia",
   score_entrevista: "score_pos_entrevista",
   etapa: "status",
   inscricao: "enviado_em",
@@ -48,7 +49,7 @@ function applyListOrder(query: any, sortBy: ListSortKey, ascending: boolean) {
     q = q.order("score_pos_entrevista", { ascending: false, nullsFirst: false });
   }
   if (sortBy !== "score") {
-    q = q.order("score_ia_atual", { ascending: false, nullsFirst: false });
+    q = q.order("score_ia", { ascending: false, nullsFirst: false });
   }
   if (sortBy !== "candidato") {
     q = q.order("candidato_nome", { ascending: true });
@@ -174,6 +175,7 @@ async function handleCandidatosListGet(request: Request) {
   const countQuery = supabase
     .from("candidaturas")
     .select("status", { count: "exact" })
+    .eq("arquivada", false)
     .in(
       "vaga_id",
       (
@@ -191,13 +193,14 @@ async function handleCandidatosListGet(request: Request) {
         .from("candidaturas")
         .select("status", { count: "exact" })
         .eq("vaga_id", vagaFilter)
+        .eq("arquivada", false)
     : await countQuery;
   if (statusErr) {
     debug.summary_error = statusErr.message;
   }
   const summaryCounts: SummaryCounts = { ...emptySummaryCounts(), todos: totalCandidaturas ?? 0 };
   for (const row of (statusRows as Array<{ status: string | null }> | null) ?? []) {
-    const key = normalizeCandidaturaStatus(String(row.status || ""));
+    const key = summaryCountForStatus(String(row.status || ""));
     if (key) summaryCounts[key] += 1;
   }
 
@@ -226,7 +229,8 @@ async function handleCandidatosListGet(request: Request) {
   let enrQuery = supabase
     .from("vw_candidaturas_enriquecida")
     .select(ENRICHED_COLUMNS)
-    .eq("cliente_id", cliente.id);
+    .eq("cliente_id", cliente.id)
+    .eq("arquivada", false);
   if (vagaFilter) enrQuery = enrQuery.eq("vaga_id", vagaFilter);
   if (statusDbValues?.length) enrQuery = enrQuery.in("status", statusDbValues);
   const { data: enrRows, error: enrError } = await applyListOrder(enrQuery, sortBy, ascending).range(from, to);
@@ -239,7 +243,8 @@ async function handleCandidatosListGet(request: Request) {
       let adminQuery = admin
         .from("vw_candidaturas_enriquecida")
         .select(ENRICHED_COLUMNS)
-        .eq("cliente_id", cliente.id);
+        .eq("cliente_id", cliente.id)
+        .eq("arquivada", false);
       if (vagaFilter) adminQuery = adminQuery.eq("vaga_id", vagaFilter);
       if (statusDbValues?.length) adminQuery = adminQuery.in("status", statusDbValues);
       const resAdmin = await applyListOrder(adminQuery, sortBy, ascending).range(from, to);
@@ -297,7 +302,7 @@ async function handleCandidatosListGet(request: Request) {
   const rows = base
     .filter((row) => row.candidato_id != null && String(row.candidato_id).length > 0)
     .map((row) => {
-      const scoreRaw = row.score_ia_atual;
+      const scoreRaw = row.score_ia;
       const scoreN = Number(scoreRaw);
       const scoreIa = Number.isFinite(scoreN) ? Math.max(0, Math.min(100, Math.round(scoreN))) : null;
       const candidatoId = String(row.candidato_id);

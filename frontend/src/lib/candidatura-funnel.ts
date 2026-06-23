@@ -1,46 +1,44 @@
 /** Contagem do funil — alinhado a `candidatura-status.ts`. */
 
 import {
-  type CandidaturaStatus,
+  etapaFromStatus,
   isCandidaturaNoFunil,
   normalizeCandidaturaStatus,
 } from "@/lib/candidatura-status";
 
+/** Reprovação na triagem (legado `reprovado` → `inscrito_reprovado`). */
 export function isReprovado(status: string) {
-  return normalizeCandidaturaStatus(status) === "reprovado";
+  return normalizeCandidaturaStatus(status) === "inscrito_reprovado";
 }
 
+/** Recusa ativa na abordagem (legado `desistiu` → `abordado_negativa`). */
 export function isDesistiu(status: string) {
-  return normalizeCandidaturaStatus(status) === "desistiu";
+  return normalizeCandidaturaStatus(status) === "abordado_negativa";
 }
 
-/** Candidaturas que entram no funil (exclui reprovado e desistiu). */
+/** Candidaturas que entram no funil (exclui terminais de morte). */
 export function isNoFunil(status: string) {
   return isCandidaturaNoFunil(status);
 }
 
-function norm(status: string): CandidaturaStatus | null {
-  return normalizeCandidaturaStatus(status);
-}
-
 export function countInscritoExclusive(status: string): boolean {
-  return norm(status) === "inscrito";
+  return etapaFromStatus(status) === "inscrito";
 }
 
 export function countAbordadoExclusive(status: string): boolean {
-  return norm(status) === "abordado";
+  return etapaFromStatus(status) === "abordado";
 }
 
 export function countQualificadoExclusive(status: string): boolean {
-  return norm(status) === "qualificado";
+  return etapaFromStatus(status) === "qualificado";
 }
 
 export function countEncaminhadoExclusive(status: string): boolean {
-  return norm(status) === "encaminhado";
+  return etapaFromStatus(status) === "encaminhado";
 }
 
 export function countContratadoExclusive(status: string): boolean {
-  return norm(status) === "contratado";
+  return etapaFromStatus(status) === "contratado";
 }
 
 /** @deprecated use countInscritoExclusive */

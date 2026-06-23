@@ -19,6 +19,12 @@ const {
   isEchoOfRecentCrmOutbound,
 } = require("./inbound-guards");
 const { linhasBeneficiosFromJson } = require("./beneficios-vaga");
+const {
+  filtrarSaidaAna,
+  isEtapaEncerrada,
+  isFechamentoSocialCandidato,
+} = require("./ana-sanitize");
+const { computeScoreFinal } = require("../shared/score-final");
 dotenv.config();
 
 let groqClient = null;
@@ -645,10 +651,7 @@ Conversa:
       .eq("candidato_id", candidatoId)
       .maybeSingle();
 
-    const scoreIa = Number.parseInt(analiseAtual?.score_ia, 10);
-    const scoreFinal = Number.isNaN(scoreIa)
-      ? scorePosSanitizado
-      : Math.round(scoreIa * 0.6 + scorePosSanitizado * 0.4);
+    const scoreFinal = computeScoreFinal(analiseAtual?.score_ia, scorePosSanitizado);
 
     const payload = {
       score_pos_entrevista: scorePosSanitizado,
@@ -832,7 +835,7 @@ function sanitizarMensagemAna(etapaAtual, userMessage, assistantMessage) {
     return "pode me contar melhor? me fala sobre seu último emprego.";
   }
 
-  return msg;
+  return filtrarSaidaAna({ etapaAtual, userMessage, assistantMessage: msg });
 }
 
 async function sendWhatsAppMessage(toDigits, message) {
@@ -1219,6 +1222,11 @@ async function getGeResponse(candidatoId, userMessage) {
     return assistantMessage;
   }
 
+  if (isEtapaEncerrada(etapaAtualPrompt) && isFechamentoSocialCandidato(userMessage)) {
+    console.log("[ana] encerramento + fechamento social — sem resposta");
+    return null;
+  }
+
   // 11. Carrega histórico DA SESSÃO (não do candidato inteiro)
   const history = await loadConversationHistoryBySessao(sessaoId);
 
@@ -1236,6 +1244,10 @@ async function getGeResponse(candidatoId, userMessage) {
     .join("\n")
     .trim();
   const assistantMessage = sanitizarMensagemAna(etapaAtualPrompt, userMessage, rawAssistantMessage);
+  if (assistantMessage === null) {
+    console.log("[ana] resposta suprimida após sanitização");
+    return null;
+  }
 
   const etapaInferida = inferirEtapaPorMensagemAna(etapaAtualPrompt, assistantMessage);
   if (etapaInferida) {
@@ -1351,7 +1363,7 @@ async function queueInboundForProcessing(extracted) {
     pendingMessages.delete(chave);
     try {
       const resposta = await getGeResponse(candidatoId, textoAgregado);
-      await sendKapsoMessage(to, resposta);
+      if (resposta) await sendKapsoMessage(to, resposta);
     } catch (err) {
       console.error("[webhook] erro ao processar mensagem agregada:", err.message || err);
     }

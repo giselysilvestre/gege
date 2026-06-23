@@ -2,7 +2,7 @@
  * Métricas no Gege (não misturar no mesmo número):
  * - candidatos_analise.score_ia — parecer da IA sobre o currículo (0–100).
  * - candidatos_analise.score_final — combinação IA + pós-entrevista quando existir
- *   pós (regra 0,4×IA + 0,6×pós); sem entrevista, deve acompanhar score_ia.
+ *   pós (regra 0,5×IA + 0,5×pós em shared/score-final.js); sem entrevista, score_ia.
  * - candidaturas.score_compatibilidade — fit candidato×vaga (regras em score-calc / match).
  * - candidatos.score — legado / pós-entrevista no cadastro; não é o mesmo que score_ia.
  */

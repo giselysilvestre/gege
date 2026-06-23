@@ -1,6 +1,7 @@
 const dotenv = require("dotenv");
 const { createClient } = require("@supabase/supabase-js");
 const Anthropic = require("@anthropic-ai/sdk");
+const { computeScoreFinal } = require("../shared/score-final");
 
 dotenv.config();
 
@@ -14,9 +15,22 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || "",
 });
 
-const fromIso = process.argv[2] || new Date().toISOString().slice(0, 10);
-const toIso = process.argv[3] || new Date().toISOString().slice(0, 10);
-const limitArg = Number.parseInt(process.argv[4] || "250", 10);
+const cliArgs = process.argv.slice(2).reduce((acc, arg) => {
+  if (arg.startsWith("--")) {
+    const [k, v] = arg.replace(/^--/, "").split("=");
+    acc[k] = v === undefined ? true : v;
+    return acc;
+  }
+  acc._positional = acc._positional || [];
+  acc._positional.push(arg);
+  return acc;
+}, {});
+
+const VAGA_ID = cliArgs.vaga || null;
+const ETAPAS_ENTREVISTA = ["confirma_endereco", "mini_entrevista", "encerramento"];
+const fromIso = cliArgs.from || cliArgs._positional?.[0] || new Date().toISOString().slice(0, 10);
+const toIso = cliArgs.to || cliArgs._positional?.[1] || new Date().toISOString().slice(0, 10);
+const limitArg = Number.parseInt(cliArgs.limit || cliArgs._positional?.[2] || "250", 10);
 const hardLimit = Number.isNaN(limitArg) ? 250 : Math.max(1, Math.min(2000, limitArg));
 
 function inferirTipoCargo(cargo) {
@@ -288,10 +302,7 @@ Conversa:
     .eq("candidato_id", candidatoId)
     .maybeSingle();
 
-  const scoreIa = Number.parseInt(analiseAtual?.score_ia, 10);
-  const scoreFinal = Number.isNaN(scoreIa)
-    ? scorePosSanitizado
-    : Math.round(scoreIa * 0.6 + scorePosSanitizado * 0.4);
+  const scoreFinal = computeScoreFinal(analiseAtual?.score_ia, scorePosSanitizado);
 
   const payload = {
     score_pos_entrevista: scorePosSanitizado,
@@ -325,18 +336,42 @@ Conversa:
   };
 }
 
+async function listarCandidatoIdsDaVaga(vagaId) {
+  const { data, error } = await supabase
+    .from("candidaturas")
+    .select("candidato_id")
+    .eq("vaga_id", vagaId);
+  if (error) throw error;
+  return [...new Set((data || []).map((row) => row.candidato_id).filter(Boolean))];
+}
+
 async function main() {
-  console.log(`[score-batch] periodo ${fromIso} ate ${toIso} | limite ${hardLimit}`);
+  if (VAGA_ID) {
+    console.log(`[score-batch] vaga=${VAGA_ID} | limite ${hardLimit}`);
+  } else {
+    console.log(`[score-batch] periodo ${fromIso} ate ${toIso} | limite ${hardLimit}`);
+  }
 
-  const fromStart = `${fromIso}T00:00:00.000Z`;
-  const toEnd = `${toIso}T23:59:59.999Z`;
-
-  const { data: sessoes, error } = await supabase
+  let query = supabase
     .from("whatsapp_sessoes")
     .select("id,candidato_id,candidatura_id,tipo_fluxo,etapa_atual,ultima_inbound_at,ultima_outbound_at,criado_em")
     .eq("tipo_fluxo", "candidatura")
-    .gte("ultima_inbound_at", fromStart)
-    .lte("ultima_inbound_at", toEnd)
+    .not("ultima_inbound_at", "is", null);
+
+  if (VAGA_ID) {
+    const candidatoIds = await listarCandidatoIdsDaVaga(VAGA_ID);
+    if (candidatoIds.length === 0) {
+      console.log("[score-batch] nenhum candidato encontrado para a vaga");
+      return;
+    }
+    query = query.in("candidato_id", candidatoIds).in("etapa_atual", ETAPAS_ENTREVISTA);
+  } else {
+    const fromStart = `${fromIso}T00:00:00.000Z`;
+    const toEnd = `${toIso}T23:59:59.999Z`;
+    query = query.gte("ultima_inbound_at", fromStart).lte("ultima_inbound_at", toEnd);
+  }
+
+  const { data: sessoes, error } = await query
     .order("ultima_inbound_at", { ascending: false })
     .limit(hardLimit);
 
