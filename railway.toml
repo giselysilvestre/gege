@@ -1,7 +1,7 @@
 [build]
 builder = "dockerfile"
 dockerfilePath = "whatsapp-bot/Dockerfile"
-buildContext = "whatsapp-bot"
+buildContext = "."
 
 [deploy]
 startCommand = "node index.js"
