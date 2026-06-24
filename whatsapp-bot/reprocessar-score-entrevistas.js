@@ -1,7 +1,7 @@
 const dotenv = require("dotenv");
 const { createClient } = require("@supabase/supabase-js");
 const Anthropic = require("@anthropic-ai/sdk");
-const { computeScoreFinal } = require("../shared/score-final");
+const { computeScoreFinal } = require("./score-final");
 
 dotenv.config();
 

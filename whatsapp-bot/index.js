@@ -24,7 +24,7 @@ const {
   isEtapaEncerrada,
   isFechamentoSocialCandidato,
 } = require("./ana-sanitize");
-const { computeScoreFinal } = require("../shared/score-final");
+const { computeScoreFinal } = require("./score-final");
 dotenv.config();
 
 let groqClient = null;
