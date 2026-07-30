@@ -2,6 +2,11 @@
  * Filtros de saída da Ana — bloqueia meta-raciocínio da IA e respostas vazias em fechamento social.
  */
 
+const {
+  respostaReprovaPorDistancia,
+  MENSAGEM_INICIO_MINI_ENTREVISTA,
+} = require("./interesse-detect");
+
 function normalizarTextoRespostaCurta(s) {
   return (s || "")
     .toLowerCase()
@@ -99,6 +104,11 @@ function filtrarSaidaAna({ etapaAtual, userMessage, assistantMessage }) {
   if (isMetaRaciocinioAna(msg)) {
     console.warn("[ana] meta-raciocínio bloqueado:", msg.slice(0, 100));
     return null;
+  }
+
+  if (!isEtapaEncerrada(etapaAtual) && respostaReprovaPorDistancia(msg)) {
+    console.warn("[ana] reprovação por distância bloqueada (filtro global)");
+    return MENSAGEM_INICIO_MINI_ENTREVISTA;
   }
 
   if (isEtapaEncerrada(etapaAtual) && isFechamentoSocialCandidato(userMessage)) {

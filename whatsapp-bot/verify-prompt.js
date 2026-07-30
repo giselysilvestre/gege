@@ -66,10 +66,11 @@ assert(semMotivo?.skipClaude === true, "recusa sem motivo deve short-circuit");
 assert(semMotivo.updates.etapa_atual === "aguardando_motivo_recusa", "deve ir para aguardando_motivo_recusa");
 assert(semMotivo.resposta.includes("motivo"), "deve pedir motivo");
 
-// Recusa com motivo explícito → encerramento distância, sem pedir motivo
+// Recusa com motivo distância → encerramento neutro (Ana não reprova por distância no discurso)
 const comLonge = processarFluxoRecusa("apresentacao_vaga", "fica longe pra mim");
 assert(comLonge?.updates.etapa_atual === "encerramento", "recusa longe → encerramento");
-assert(comLonge.feedbackTipo === "reprovado_distancia", "feedback distancia");
+assert(comLonge.feedbackTipo === "reprovado_desistencia", "feedback desistencia (sem msg distância)");
+assert(!comLonge.resposta.includes("inviável"), "não deve mencionar inviável");
 assert(!comLonge.resposta.includes("motivo"), "não deve pedir motivo");
 
 assert(detectaMotivoExplicitoRecusa("fica longe") === "distancia", "detecta longe");
@@ -79,6 +80,44 @@ assert(recusaCurtaSemMotivo("não quero") === true, "recusa curta");
 const comResposta = processarFluxoRecusa("aguardando_motivo_recusa", "achei o salário baixo");
 assert(comResposta.updates.motivo_recusa?.includes("salário"), "salva motivo_recusa");
 assert(comResposta.resposta.includes("obrigada pelo feedback"), "agradece feedback");
+
+const {
+  detectaSimInteresseVaga,
+  extrairMinutosDeslocamento,
+  deslocamentoViavel,
+  respostaReprovaPorDistancia,
+  respostaRejeitaDistanciaIndevida,
+  deveAvancarParaMiniEntrevista,
+} = require("./interesse-detect");
+assert(detectaSimInteresseVaga("Tenho sim") === true, "detecta tenho sim");
+assert(detectaSimInteresseVaga("Olá, sim") === true, "detecta olá sim");
+assert(detectaSimInteresseVaga("Sobre o salário esse valor seria líquido?") === true, "pergunta salário");
+assert(detectaSimInteresseVaga("Infelizmente não obrigada") === false, "recusa clara");
+assert(extrairMinutosDeslocamento("1h30 de casa") === 90, "parse 1h30");
+assert(deslocamentoViavel(90) === true, "90min viável");
+assert(deslocamentoViavel(150) === false, "150min inviável");
+assert(
+  respostaReprovaPorDistancia("essa vaga fica inviável pela distância") === true,
+  "bloqueia reprovação por distância"
+);
+assert(
+  respostaRejeitaDistanciaIndevida("1 hora e meia", "essa vaga fica inviável pela distância") === true,
+  "alias legado"
+);
+assert(
+  deveAvancarParaMiniEntrevista("Moro na Lins de Vasconcelos, leva 1h20 até a loja") === true,
+  "avança com endereço+tempo"
+);
+assert(deveAvancarParaMiniEntrevista("1h20/1h30") === true, "avança só com tempo");
+assert(extrairMinutosDeslocamento("leva 1h20/1h30") === 80, "parse 1h20/1h30");
+
+const { respostaFixaFunil } = require("./respostas-fixas");
+const vanderson = respostaFixaFunil({
+  etapaAnterior: "confirma_endereco",
+  etapaAtual: "mini_entrevista",
+  userMessage: "Moro na Lins de Vasconcelos, leva 1h20/1h30",
+});
+assert(vanderson && vanderson.includes("perguntas"), "Vanderson → mini entrevista fixa");
 
 const { preencherTemplate, dispararFeedbackReprovacao, FEEDBACK_TIMING_MS } = require("./feedback-reprovacao");
 assert(FEEDBACK_TIMING_MS.reprovado_score === 48 * 60 * 60 * 1000, "delay score 48h");

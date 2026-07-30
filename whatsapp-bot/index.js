@@ -25,6 +25,16 @@ const {
   isFechamentoSocialCandidato,
 } = require("./ana-sanitize");
 const { computeScoreFinal } = require("./score-final");
+const {
+  detectaSimInteresseVaga,
+  detectaNaoInteresseVaga,
+  normalizarTextoRespostaCurta,
+  deveAvancarParaMiniEntrevista,
+  respostaReprovaPorDistancia,
+  MENSAGEM_INICIO_MINI_ENTREVISTA,
+} = require("./interesse-detect");
+const { respostaFixaFunil, MENSAGEM_CONFIRMA_ENDERECO } = require("./respostas-fixas");
+const { classificarCandidatura } = require("./lib/classificar-candidatura");
 dotenv.config();
 
 let groqClient = null;
@@ -37,7 +47,7 @@ function getGroqClient() {
 
 const PORT = Number(process.env.PORT || 3333);
 const KAPSO_PHONE_NUMBER_ID = process.env.KAPSO_PHONE_NUMBER_ID || "";
-const APP_VERSION = "webhook-inbound-status-fix-2026-06-10";
+const APP_VERSION = "no-reprova-distancia-2026-07-30";
 
 const MENSAGEM_SEM_AGENDAMENTO =
   "obrigada por responder! vou encaminhar seu perfil pro time do cliente analisar. se você for selecionado pra próxima etapa, o próprio time entra em contato com você — eu não marco entrevista por aqui. qualquer dúvida, pode mandar mensagem.";
@@ -708,40 +718,15 @@ function montarMensagemApresentacaoVaga(contextoVaga) {
   return bloco.join("\n");
 }
 
-function normalizarTextoRespostaCurta(s) {
-  return (s || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/** Resposta afirmativa à pergunta "tem interesse pela vaga?" */
-function detectaSimInteresseVaga(texto) {
-  const t = normalizarTextoRespostaCurta(texto);
-  if (!t) return false;
-  if (/sei\b|talvez|duvid|pergunta|\?/.test(t)) return false;
-  return /^(sim|s|ok|pode|quero|tenho interesse|com certeza|bora|show|beleza|fechado|topo|aceito|isso|uhum)\b|^sim[\s,.\-]|^ok[\s,.\-]|^👍/.test(
-    t
-  );
-}
-
-/** Resposta negativa explícita (evita "não sei", perguntas etc.) */
-function detectaNaoInteresseVaga(texto) {
-  const t = normalizarTextoRespostaCurta(texto);
-  if (!t) return false;
-  if (/sei\b|talvez|duvid|pergunta|\?/.test(t)) return false;
-  return (
-    /^(não|nao)(\s*[,.]|$)|^n(\s*[,.]|$)|^não quero|^nao quero|^sem interesse|^não tenho interesse|^nao tenho interesse|^prefiro não|^prefiro nao|^passo$|^desisto|^obrigad[oa].*\bn(ão|ao)\b/.test(
-      t
-    )
-  );
-}
-
 function inferirEtapaPorMensagemAna(etapaAtual, assistantMessage) {
   const t = normalizarTextoRespostaCurta(assistantMessage);
   if (!t) return null;
+
+  if (respostaReprovaPorDistancia(assistantMessage)) {
+    return etapaAtual === "confirma_endereco" || etapaAtual === "apresentacao_vaga"
+      ? "mini_entrevista"
+      : null;
+  }
 
   if (
     t.includes("vou te fazer algumas perguntas rapidas") ||
@@ -833,6 +818,11 @@ function sanitizarMensagemAna(etapaAtual, userMessage, assistantMessage) {
   // Quando candidato responde algo como "tanto faz", Ana deve apenas conduzir pergunta.
   if (etapa === "mini_entrevista" && /forma como preferir|tanto faz|como preferir/.test(user)) {
     return "pode me contar melhor? me fala sobre seu último emprego.";
+  }
+
+  if (etapa === "confirma_endereco" && respostaReprovaPorDistancia(msg)) {
+    console.warn("[ana] sanitizar: reprovação por distância bloqueada");
+    return MENSAGEM_INICIO_MINI_ENTREVISTA;
   }
 
   return filtrarSaidaAna({ etapaAtual, userMessage, assistantMessage: msg });
@@ -1120,7 +1110,49 @@ async function getGeResponse(candidatoId, userMessage) {
       updates.etapa_atual = "encerramento";
     }
   }
+  const etapaPosInteresse = updates.etapa_atual || foco?.etapa_atual;
+  if (etapaPosInteresse === "confirma_endereco") {
+    if (deveAvancarParaMiniEntrevista(userMessage)) {
+      updates.etapa_atual = "mini_entrevista";
+    }
+  }
   await supabase.from("whatsapp_sessoes").update(updates).eq("id", sessaoId);
+
+  // 4b. Persiste funil em candidaturas.status (fonte da verdade)
+  try {
+    const candidaturaId = foco?.candidatura_id;
+    if (candidaturaId) {
+      if (foco && !foco.candidato_respondeu) {
+        await classificarCandidatura(supabase, {
+          candidaturaId,
+          evento: "primeira_resposta",
+        });
+      }
+      if (detectaNaoInteresseVaga(userMessage)) {
+        await classificarCandidatura(supabase, {
+          candidaturaId,
+          evento: "recusa",
+        });
+      } else if (
+        updates.etapa_atual === "mini_entrevista" ||
+        (updates.etapa_atual === "confirma_endereco" && detectaSimInteresseVaga(userMessage))
+      ) {
+        const { data: analScores } = await supabase
+          .from("candidatos_analise")
+          .select("score_ia,score_pos_entrevista")
+          .eq("candidato_id", candidatoId)
+          .maybeSingle();
+        await classificarCandidatura(supabase, {
+          candidaturaId,
+          evento: "interesse_confirmado",
+          scoreCv: analScores?.score_ia,
+          scoreEntrevista: analScores?.score_pos_entrevista,
+        });
+      }
+    }
+  } catch (e) {
+    console.warn("[classificarCandidatura]", e?.message || e);
+  }
 
   // 5. Busca dados do candidato e análise
   let candidato = null;
@@ -1227,29 +1259,86 @@ async function getGeResponse(candidatoId, userMessage) {
     return null;
   }
 
+  const respostaSemIa = respostaFixaFunil({
+    etapaAnterior: foco?.etapa_atual,
+    etapaAtual: etapaAtualPrompt,
+    userMessage,
+    contextoVaga,
+  });
+  if (respostaSemIa) {
+    await saveMessageEvent({
+      sessaoId,
+      candidatoId,
+      direcao: "outbound",
+      conteudo: respostaSemIa,
+    });
+    await supabase
+      .from("whatsapp_sessoes")
+      .update({ ultima_outbound_at: new Date().toISOString(), etapa_atual: etapaAtualPrompt })
+      .eq("id", sessaoId);
+    return respostaSemIa;
+  }
+
   // 11. Carrega histórico DA SESSÃO (não do candidato inteiro)
   const history = await loadConversationHistoryBySessao(sessaoId);
 
   // 12. Chama Claude
-  const response = await anthropic.messages.create({
-    model: process.env.CLAUDE_MODEL || "claude-sonnet-4-5",
-    max_tokens: 300,
-    system: systemPromptDinamico,
-    messages: history,
-  });
+  let rawAssistantMessage;
+  try {
+    const response = await anthropic.messages.create({
+      model: process.env.CLAUDE_MODEL || "claude-sonnet-4-5",
+      max_tokens: 300,
+      system: systemPromptDinamico,
+      messages: history,
+    });
+    rawAssistantMessage = response.content
+      .filter((b) => b.type === "text")
+      .map((b) => b.text)
+      .join("\n")
+      .trim();
+  } catch (claudeErr) {
+    console.error("[getGeResponse] Claude falhou:", claudeErr.message || claudeErr);
+    const fallback = respostaFixaFunil({
+      etapaAnterior: foco?.etapa_atual,
+      etapaAtual: etapaAtualPrompt,
+      userMessage,
+      contextoVaga,
+    });
+    if (fallback) {
+      rawAssistantMessage = fallback;
+    } else if (etapaAtualPrompt === "confirma_endereco") {
+      rawAssistantMessage = MENSAGEM_CONFIRMA_ENDERECO;
+    } else if (etapaAtualPrompt === "apresentacao_vaga") {
+      rawAssistantMessage = MENSAGEM_CONFIRMA_ENDERECO;
+      await supabase
+        .from("whatsapp_sessoes")
+        .update({ etapa_atual: "confirma_endereco" })
+        .eq("id", sessaoId);
+    } else {
+      throw claudeErr;
+    }
+  }
 
-  const rawAssistantMessage = response.content
-    .filter((b) => b.type === "text")
-    .map((b) => b.text)
-    .join("\n")
-    .trim();
   const assistantMessage = sanitizarMensagemAna(etapaAtualPrompt, userMessage, rawAssistantMessage);
-  if (assistantMessage === null) {
+  let mensagemFinal = assistantMessage;
+  if (
+    mensagemFinal &&
+    etapaAtualPrompt === "confirma_endereco" &&
+    respostaReprovaPorDistancia(mensagemFinal)
+  ) {
+    console.log("[ana] bloqueio reprovação por distância — segue entrevista");
+    mensagemFinal = MENSAGEM_INICIO_MINI_ENTREVISTA;
+    await supabase
+      .from("whatsapp_sessoes")
+      .update({ etapa_atual: "mini_entrevista" })
+      .eq("id", sessaoId);
+  }
+  if (mensagemFinal === null) {
     console.log("[ana] resposta suprimida após sanitização");
     return null;
   }
 
-  const etapaInferida = inferirEtapaPorMensagemAna(etapaAtualPrompt, assistantMessage);
+  const etapaInferida = inferirEtapaPorMensagemAna(etapaAtualPrompt, mensagemFinal);
   if (etapaInferida) {
     await supabase
       .from("whatsapp_sessoes")
@@ -1262,7 +1351,7 @@ async function getGeResponse(candidatoId, userMessage) {
     sessaoId,
     candidatoId,
     direcao: "outbound",
-    conteudo: assistantMessage,
+    conteudo: mensagemFinal,
   });
   await supabase
     .from("whatsapp_sessoes")
@@ -1273,7 +1362,7 @@ async function getGeResponse(candidatoId, userMessage) {
     await atualizarScorePosEntrevista(candidatoId, sessaoId, tipoCargo);
   }
 
-  return assistantMessage;
+  return mensagemFinal;
 }
 
 function consumeIdempotencyKey(req, res) {
@@ -1361,11 +1450,20 @@ async function queueInboundForProcessing(extracted) {
   pendingMessages.get(chave).timer = setTimeout(async () => {
     const textoAgregado = pendingMessages.get(chave).texts.join(" ");
     pendingMessages.delete(chave);
-    try {
-      const resposta = await getGeResponse(candidatoId, textoAgregado);
-      if (resposta) await sendKapsoMessage(to, resposta);
-    } catch (err) {
-      console.error("[webhook] erro ao processar mensagem agregada:", err.message || err);
+    const maxTentativas = 3;
+    for (let tentativa = 1; tentativa <= maxTentativas; tentativa++) {
+      try {
+        const resposta = await getGeResponse(candidatoId, textoAgregado);
+        if (resposta) await sendKapsoMessage(to, resposta);
+        return;
+      } catch (err) {
+        console.error(
+          `[webhook] tentativa ${tentativa}/${maxTentativas} falhou:`,
+          err.message || err
+        );
+        if (tentativa === maxTentativas) break;
+        await new Promise((r) => setTimeout(r, 2000 * tentativa));
+      }
     }
   }, 3000);
 
