@@ -85,6 +85,19 @@ function detectaNaoInteresseVaga(texto) {
     return true;
   }
 
+  // "Não" respondendo pergunta operacional (restrição, falta, etc.) — não é recusa da vaga.
+  if (
+    /^(nao|não|n)(\s|,|$)/.test(t) &&
+    /\b(nenhum|nenhuma|nada|nao tenho|sem restr|sem limit|nao costumo|nunca|tranquil|ok|tudo bem)\b/.test(t)
+  ) {
+    return false;
+  }
+
+  // Só "não" / "nao" sozinho: ambíguo — não tratar como recusa (ex.: "tem restrição?" → "Não").
+  if (/^(nao|não|n)[\s,.!?]*$/.test(t)) {
+    return false;
+  }
+
   return (
     /^(não|nao)(\s*[,.]|$)|^n(\s*[,.]|$)|^prefiro não|^prefiro nao|^obrigad[oa].*\bn(ão|ao)\b/.test(
       t
