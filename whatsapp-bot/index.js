@@ -1076,6 +1076,71 @@ CV:
   }
 }
 
+function conteudoEhAbordagemInicial(conteudo, tipoMensagem) {
+  const c = String(conteudo || "");
+  const t = String(tipoMensagem || "");
+  return (
+    t === "disparo_inicial" ||
+    t === "template" ||
+    c.includes("[template:gege_abordagem_vaga]") ||
+    c.includes("[template:abordagem_candidatura_gege]")
+  );
+}
+
+function conteudoEhDetalhesVaga(conteudo) {
+  const t = normalizarTextoRespostaCurta(String(conteudo || ""));
+  return t.includes("voce tem interesse pela vaga") || t.includes("que otimo!");
+}
+
+async function metaAbordagemSessao(sessaoId) {
+  const { data: eventos, error } = await supabase
+    .from("whatsapp_eventos")
+    .select("direcao,conteudo,tipo_mensagem,criado_em")
+    .eq("sessao_id", sessaoId)
+    .order("criado_em", { ascending: true });
+  if (error) {
+    console.warn("[metaAbordagemSessao]", error.message || error);
+    return { temTemplate: false, temDetalhes: false, inboundDepoisTemplate: 0 };
+  }
+
+  let templateAt = null;
+  let temDetalhes = false;
+  let inboundDepoisTemplate = 0;
+
+  for (const ev of eventos || []) {
+    const conteudo = String(ev.conteudo || "");
+    if (ev.direcao === "outbound") {
+      if (conteudoEhDetalhesVaga(conteudo)) temDetalhes = true;
+      if (!templateAt && conteudoEhAbordagemInicial(conteudo, ev.tipo_mensagem)) {
+        templateAt = ev.criado_em;
+      }
+      continue;
+    }
+    if (templateAt && ev.direcao === "inbound") {
+      if (new Date(ev.criado_em).getTime() >= new Date(templateAt).getTime()) {
+        inboundDepoisTemplate += 1;
+      }
+    }
+  }
+
+  return {
+    temTemplate: !!templateAt,
+    temDetalhes,
+    inboundDepoisTemplate,
+  };
+}
+
+async function deveEnviarDetalhesVagaPosAbordagem(sessaoId, foco) {
+  if (!foco?.candidatura_id) return false;
+  if (foco.etapa_atual === "disparo_template") return true;
+  if (foco.etapa_atual !== "abertura") return false;
+
+  const meta = await metaAbordagemSessao(sessaoId);
+  if (!meta.temTemplate || meta.temDetalhes) return false;
+  if (!foco.candidato_respondeu) return true;
+  return meta.inboundDepoisTemplate >= 1;
+}
+
 async function getGeResponse(candidatoId, userMessage) {
   // 1. Carrega sessões ativas do candidato
   const { foco, outras } = await loadAllActiveSessionsContext(candidatoId);
@@ -1093,6 +1158,7 @@ async function getGeResponse(candidatoId, userMessage) {
 
   // 4. Atualiza sessão: candidato respondeu + avança etapa se era disparo_template
   const nowIso = new Date().toISOString();
+  const aguardandoRespostaAbordagem = await deveEnviarDetalhesVagaPosAbordagem(sessaoId, foco);
   const updates = {
     ultima_inbound_at: nowIso,
     candidato_respondeu: true,
@@ -1100,7 +1166,7 @@ async function getGeResponse(candidatoId, userMessage) {
   if (foco && !foco.candidato_respondeu) {
     updates.primeira_resposta_at = nowIso;
   }
-  if (foco?.etapa_atual === "disparo_template" && foco?.candidatura_id) {
+  if (aguardandoRespostaAbordagem && foco?.candidatura_id) {
     updates.etapa_atual = "apresentacao_vaga";
   }
   if (foco?.etapa_atual === "apresentacao_vaga") {
@@ -1236,7 +1302,7 @@ async function getGeResponse(candidatoId, userMessage) {
   if (
     tipoFluxoAtual === "candidatura" &&
     etapaAtualPrompt === "apresentacao_vaga" &&
-    foco?.etapa_atual === "disparo_template"
+    aguardandoRespostaAbordagem
   ) {
     const assistantMessage = montarMensagemApresentacaoVaga(contextoVaga);
 
