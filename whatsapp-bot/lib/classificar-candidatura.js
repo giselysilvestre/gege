@@ -34,6 +34,20 @@ function etapaMae(status) {
   return null;
 }
 
+async function sessaoPermiteReabrirContratado(supabase, candidaturaId) {
+  const { data: sessao } = await supabase
+    .from("whatsapp_sessoes")
+    .select("etapa_atual,etapa_funil,status")
+    .eq("candidatura_id", candidaturaId)
+    .eq("status", "ativo")
+    .order("atualizado_em", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!sessao) return false;
+  if (sessao.etapa_atual === "encerramento" || sessao.etapa_funil === "contratado") return false;
+  return true;
+}
+
 async function classificarCandidatura(supabase, { candidaturaId, evento, scoreCv, scoreEntrevista }) {
   if (!candidaturaId) return null;
 
@@ -45,12 +59,18 @@ async function classificarCandidatura(supabase, { candidaturaId, evento, scoreCv
   if (!cand) return null;
 
   const atual = String(cand.status || STATUS_INICIAL);
-  if (
-    ["encaminhado_aguardando", "encaminhado_avancar", "encaminhado_reprovado", "contratado"].includes(
-      atual
-    )
-  ) {
-    return atual;
+  const terminal = [
+    "encaminhado_aguardando",
+    "encaminhado_avancar",
+    "encaminhado_reprovado",
+    "contratado",
+  ];
+  if (terminal.includes(atual)) {
+    const reabrirContratadoFalso =
+      atual === "contratado" &&
+      (evento === "disparo_enviado" || evento === "primeira_resposta") &&
+      (await sessaoPermiteReabrirContratado(supabase, candidaturaId));
+    if (!reabrirContratadoFalso) return atual;
   }
 
   const cortes = await getCortes(supabase);
